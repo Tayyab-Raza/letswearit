@@ -70,7 +70,9 @@ function StatusBadge({ status }) {
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        isActive ? "bg-green-50 text-green-700" : "bg-neutral-100 text-neutral-600"
+        isActive
+          ? "bg-green-50 text-green-700"
+          : "bg-neutral-100 text-neutral-600"
       }`}
     >
       {status}
@@ -114,7 +116,6 @@ export default function ProductsDashboard() {
   }
 
   return (
-    <>
     <div className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-neutral-900">Products</h1>
       <p className="mt-1 text-sm text-neutral-500">
@@ -129,7 +130,9 @@ export default function ProductsDashboard() {
         className="mt-6 w-full max-w-sm rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
       />
 
-      <div className={`mt-6 overflow-hidden rounded-2xl border border-neutral-200 bg-white ${isLoading ? "opacity-60" : ""}`}>
+      <div
+        className={`mt-6 overflow-hidden rounded-2xl border border-neutral-200 bg-white ${isLoading ? "opacity-60" : ""}`}
+      >
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-500">
             <tr>
@@ -145,7 +148,7 @@ export default function ProductsDashboard() {
               return (
                 <tr key={product.id} className="hover:bg-neutral-50">
                   <td className="px-4 py-3">
-                    
+                    <a
                       href={`/app/products/${productId}`}
                       className="flex items-center gap-3"
                     >
@@ -166,7 +169,9 @@ export default function ProductsDashboard() {
                   <td className="px-4 py-3">
                     <StatusBadge status={product.status} />
                   </td>
-                  <td className="px-4 py-3 text-neutral-600">{product.totalInventory}</td>
+                  <td className="px-4 py-3 text-neutral-600">
+                    {product.totalInventory}
+                  </td>
                   <td className="px-4 py-3 text-neutral-600">
                     {product.priceRangeV2.minVariantPrice.amount}{" "}
                     {product.priceRangeV2.minVariantPrice.currencyCode}
@@ -202,6 +207,6 @@ export default function ProductsDashboard() {
           Next
         </button>
       </div>
-    </>
+    </div>
   );
 }

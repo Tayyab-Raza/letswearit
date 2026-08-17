@@ -3,4 +3,4 @@ roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
 [commands]
 predev = "npm exec prisma generate"
-dev = "npm exec prisma generate && npm exec prisma db push"
+dev = "npm exec prisma db push && npm exec vite dev"
