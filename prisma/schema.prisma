@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session storage — required shape for @shopify/shopify-app-session-storage-prisma
+model Session {
+  id            String    @id @map("_id")
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Plan {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  key               String   @unique // "starter" | "growth" | "pro"
+  name              String
+  monthlyPrice      Float
+  generationLimit   Int      // try-on generations included per billing cycle
+  shopifyPlanHandle String   // must match the name used in appSubscriptionCreate
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Store {
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+  shop                  String    @unique
+  ownerEmail            String?
+  manualNotifyEmail     String?   // fallback if ownerEmail couldn't be fetched
+  installedAt           DateTime  @default(now())
+  uninstalledAt         DateTime?
+
+  planKey               String    @default("trial")
+  subscriptionId        String?   // Shopify GID of the AppSubscription
+  subscriptionStatus    String    @default("trial") // trial | active | cancelled | expired
+  trialEndsAt           DateTime?
+
+  currentPeriodStart    DateTime  @default(now())
+  currentPeriodEnd      DateTime?
+  generationsUsed       Int       @default(0)
+  generationLimit       Int       @default(20) // trial default; overwritten on plan change
+
+  warningEmailSentAt    DateTime? // 80%-threshold email, reset each period
+  limitEmailSentAt      DateTime? // 100%-reached email, reset each period
+
+  createdAt             DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  usageLogs             UsageLog[]
+}
+
+model UsageLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  storeId    String   @db.ObjectId
+  store      Store    @relation(fields: [storeId], references: [id])
+  productId  String
+  angle      String
+  createdAt  DateTime @default(now())
+}
