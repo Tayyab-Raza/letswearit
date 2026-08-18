@@ -9,7 +9,8 @@ datasource db {
 
 // Shopify session storage — required shape for @shopify/shopify-app-session-storage-prisma
 model Session {
-  id            String    @id @map("_id")
+  mongoId       String    @id @default(auto()) @map("_id") @db.ObjectId
+  id            String    @unique
   shop          String
   state         String
   isOnline      Boolean   @default(false)

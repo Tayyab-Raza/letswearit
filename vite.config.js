@@ -50,6 +50,11 @@ export default defineConfig({
     },
   },
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  resolve: {
+    alias: {
+      ".prisma/client/index-browser": "./node_modules/.prisma/client/index.js",
+    },
+  },
   build: {
     assetsInlineLimit: 0,
   },

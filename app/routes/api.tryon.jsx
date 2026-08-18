@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import {
@@ -106,6 +107,11 @@ function corsHeaders(request) {
   };
 }
 
+// Handles the browser's CORS preflight (OPTIONS) request.
+export async function loader({ request }) {
+  return new Response(null, { headers: corsHeaders(request) });
+}
+
 export async function action({ request }) {
   const cors = corsHeaders(request);
   const json = (data, init = {}) =>
@@ -155,11 +161,10 @@ export async function action({ request }) {
   const session = await prisma.session.findFirst({ where: { shop } });
   if (!session) return json({ error: "UNKNOWN_SHOP" }, { status: 403 });
 
-  // Usage/plan gate — before we spend anything on Gemini.
   try {
     await checkAndReserveGeneration(shop);
   } catch (err) {
-    if (err.name === "UsageLimitError") {
+    if (err instanceof UsageLimitError) {
       return json(
         { error: "LIMIT_REACHED", message: err.message },
         { status: 402 },

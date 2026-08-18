@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 
 const METAFIELD_NAMESPACE = "tryon";
@@ -257,12 +257,12 @@ export default function ProductDetail() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <a
-        href="/app/products"
+      <Link
+        to="/app/products"
         className="text-sm text-neutral-500 hover:underline"
       >
         ← Back to products
-      </a>
+      </Link>
 
       <h1 className="mt-3 text-2xl font-semibold text-neutral-900">
         {product.title}

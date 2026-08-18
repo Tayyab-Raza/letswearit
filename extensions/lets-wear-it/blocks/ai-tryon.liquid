@@ -13,7 +13,7 @@
     data-product-id="{{ product.id }}"
     data-product-title="{{ product.title | escape }}"
     data-shop="{{ shop.permanent_domain }}"
-    data-tryon-endpoint="{{ block.settings.api_endpoint }}"
+    data-tryon-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon"
     data-sample-photo-url="{{ block.settings.sample_photo_url | default: 'https://storage.googleapis.com/falserverless/example_inputs/model.png' }}"
   >
     <button type="button" class="tryon-cta" data-tryon-open>
@@ -108,12 +108,6 @@
       "id": "cta_label",
       "label": "Button label",
       "default": "Try It On"
-    },
-    {
-      "type": "text",
-      "id": "api_endpoint",
-      "label": "Try-on API URL",
-      "default": "https://movies-melbourne-sec-assist.trycloudflare.com"
     },
     {
       "type": "url",

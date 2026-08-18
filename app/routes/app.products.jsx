@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLoaderData, useNavigation, useSearchParams } from "react-router";
+import {
+  Link,
+  useLoaderData,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import { authenticate } from "../shopify.server";
 
 const PAGE_SIZE = 10;
@@ -148,8 +153,8 @@ export default function ProductsDashboard() {
               return (
                 <tr key={product.id} className="hover:bg-neutral-50">
                   <td className="px-4 py-3">
-                    <a
-                      href={`/app/products/${productId}`}
+                    <Link
+                      to={`/app/products/${productId}`}
                       className="flex items-center gap-3"
                     >
                       <div className="h-10 w-10 flex-none overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
@@ -164,7 +169,7 @@ export default function ProductsDashboard() {
                       <span className="font-medium text-neutral-900 underline-offset-2 hover:underline">
                         {product.title}
                       </span>
-                    </a>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={product.status} />
