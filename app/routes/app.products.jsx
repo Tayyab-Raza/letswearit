@@ -6,11 +6,21 @@ import {
   useSearchParams,
 } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 const PAGE_SIZE = 10;
 
+const CATEGORY_LABELS = {
+  outfit: "Outfit",
+  footwear: "Footwear",
+  handbag: "Handbag",
+  jewelry_necklace: "Necklace",
+  jewelry_ear: "Earrings",
+  jewelry_hand: "Ring / Bracelet",
+};
+
 export async function loader({ request }) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const searchTerm = url.searchParams.get("query") || "";
@@ -54,6 +64,7 @@ export async function loader({ request }) {
           totalInventory
           featuredImage { url altText }
           priceRangeV2 { minVariantPrice { amount currencyCode } }
+          front: metafield(namespace: "tryon", key: "front_image") { id }
         }
         pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
       }
@@ -62,9 +73,34 @@ export async function loader({ request }) {
   );
 
   const { data } = await response.json();
+  const nodes = data.products.nodes;
+
+  // Cross-reference with our own category classifications so the merchant
+  // can see, at a glance, which products are set up and how they'll be
+  // categorized — without opening each one individually.
+  let profileByProductId = {};
+  if (nodes.length) {
+    const store = await prisma.store.findUnique({
+      where: { shop: session.shop },
+    });
+    if (store) {
+      const profiles = await prisma.productProfile.findMany({
+        where: { storeId: store.id, productId: { in: nodes.map((n) => n.id) } },
+      });
+      profileByProductId = Object.fromEntries(
+        profiles.map((p) => [p.productId, p]),
+      );
+    }
+  }
+
+  const products = nodes.map((n) => ({
+    ...n,
+    tryOnReady: !!n.front,
+    category: profileByProductId[n.id]?.category || null,
+  }));
 
   return {
-    products: data.products.nodes,
+    products,
     pageInfo: data.products.pageInfo,
     searchTerm,
   };
@@ -81,6 +117,18 @@ function StatusBadge({ status }) {
       }`}
     >
       {status}
+    </span>
+  );
+}
+
+function TryOnBadge({ ready }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        ready ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+      }`}
+    >
+      {ready ? "Ready" : "Not set up"}
     </span>
   );
 }
@@ -124,7 +172,8 @@ export default function ProductsDashboard() {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-neutral-900">Products</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        Open a product to add its try-on reference photos.
+        Open a product to add its try-on reference photos, size chart, or
+        category.
       </p>
 
       <input
@@ -143,6 +192,8 @@ export default function ProductsDashboard() {
             <tr>
               <th className="px-4 py-3 font-medium">Product</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Try-on</th>
+              <th className="px-4 py-3 font-medium">Category</th>
               <th className="px-4 py-3 font-medium">Inventory</th>
               <th className="px-4 py-3 font-medium">Price</th>
             </tr>
@@ -173,6 +224,18 @@ export default function ProductsDashboard() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={product.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <TryOnBadge ready={product.tryOnReady} />
+                  </td>
+                  <td className="px-4 py-3 text-neutral-600">
+                    {product.category ? (
+                      CATEGORY_LABELS[product.category] || product.category
+                    ) : (
+                      <span className="text-neutral-400">
+                        Not classified yet
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-neutral-600">
                     {product.totalInventory}

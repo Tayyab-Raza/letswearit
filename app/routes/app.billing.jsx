@@ -2,6 +2,15 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+const FEATURE_LABELS = {
+  tryon: "AI try-on (photo results)",
+  size_fit: "Size & fit suggestions",
+  multi_angle_spin: "Multi-angle spin view",
+  full_outfit: "Full outfit (multiple items at once)",
+  closet: "Closet & compare",
+  video_tryon: "Video try-on",
+};
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const [store, plans] = await Promise.all([
@@ -125,6 +134,14 @@ export default function Billing() {
               <p className="mt-2 text-sm text-neutral-500">
                 {plan.generationLimit} try-on generations / month
               </p>
+              <ul className="mt-4 space-y-1.5 text-sm text-neutral-600">
+                {(plan.features || []).map((key) => (
+                  <li key={key} className="flex items-start gap-1.5">
+                    <span className="text-green-600">✓</span>
+                    {FEATURE_LABELS[key] || key}
+                  </li>
+                ))}
+              </ul>
               <button
                 onClick={() => handleSelect(plan.key)}
                 disabled={isCurrent || fetcher.state !== "idle"}

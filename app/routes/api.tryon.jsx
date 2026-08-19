@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import prisma from "../db.server";
-import { unauthenticated } from "../shopify.server";
+import { authenticateProxy } from "../utils/app-proxy.server";
 import {
   checkAndReserveGeneration,
   recordGeneration,
@@ -84,30 +84,21 @@ async function fetchProductForTryOn(admin, productGid, category, angleKey) {
   };
 }
 
-function corsHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
-}
-
-export async function loader({ request }) {
-  return new Response(null, { headers: corsHeaders(request) });
+export async function loader() {
+  return new Response(null, { status: 405 });
 }
 
 export async function action({ request }) {
-  const cors = corsHeaders(request);
-  const json = (data, init = {}) =>
-    Response.json(data, {
-      ...init,
-      headers: { ...cors, ...(init.headers || {}) },
-    });
+  const json = (data, init = {}) => Response.json(data, init);
 
   if (request.method !== "POST") {
     return json({ error: "METHOD_NOT_ALLOWED" }, { status: 405 });
   }
+
+  // Verifies this request was actually proxied by Shopify for a real,
+  // installed shop — see app-proxy.server.js for why we don't trust a
+  // client-supplied `shop` here.
+  const { shop, admin, loggedInCustomerId } = await authenticateProxy(request);
 
   let body;
   try {
@@ -117,17 +108,14 @@ export async function action({ request }) {
   }
 
   const {
-    shop,
     productId,
     companionProductIds = [], // set for a "full outfit" generation
     angle = "front",
     imageDataUrl,
     sampleImageUrl,
-    shopifyCustomerId,
     anonymousId,
   } = body;
 
-  if (!shop) return json({ error: "MISSING_SHOP" }, { status: 400 });
   if (!productId) return json({ error: "MISSING_PRODUCT" }, { status: 400 });
   if (!anonymousId)
     return json({ error: "MISSING_ANONYMOUS_ID" }, { status: 400 });
@@ -187,8 +175,6 @@ export async function action({ request }) {
   const gid = (id) =>
     id.startsWith("gid://") ? id : `gid://shopify/Product/${id}`;
   const mainGid = gid(productId);
-
-  const { admin } = await unauthenticated.admin(shop);
 
   try {
     // Classify the main product's category first — every downstream step
@@ -348,7 +334,7 @@ export async function action({ request }) {
       category,
       angle,
       imageUrl: resultImageUrl,
-      shopifyCustomerId,
+      shopifyCustomerId: loggedInCustomerId,
       anonymousId,
     });
 

@@ -18,7 +18,19 @@ uri = "/webhooks/app_subscriptions/update"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products,write_products,write_files"
+scopes = "read_products,write_products,write_files,write_app_proxy"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
+
+# Routes the storefront widget's calls through the shop's own domain
+# (https://{shop}/apps/lets-wear-it/*) instead of hardcoding a dev tunnel URL
+# into the theme extension. Shopify forwards these server-to-server to
+# {url} + the rest of the path, and — because automatically_update_urls_on_dev
+# is on — the CLI keeps `url` in sync with your tunnel automatically, the same
+# way it already does for application_url. So /apps/lets-wear-it/tryon always
+# reaches your current dev server's /api/tryon, with no manual URL updates.
+[app_proxy]
+url = "/api"
+subpath = "lets-wear-it"
+prefix = "apps"

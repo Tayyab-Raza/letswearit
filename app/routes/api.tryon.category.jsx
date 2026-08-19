@@ -1,35 +1,25 @@
 import prisma from "../db.server";
-import { unauthenticated } from "../shopify.server";
+import { authenticateProxy } from "../utils/app-proxy.server";
 import { classifyProduct } from "../services/category.server";
 import { getCategoryConfig } from "../services/tryon-prompts.server";
 
-function corsHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
-}
-
 export async function loader({ request }) {
-  const cors = corsHeaders(request);
-  const json = (data, init = {}) =>
-    Response.json(data, { ...init, headers: { ...cors, ...(init.headers || {}) } });
+  const json = (data, init = {}) => Response.json(data, init);
+
+  const { shop, admin } = await authenticateProxy(request);
 
   const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
   const productId = url.searchParams.get("productId");
-  if (!shop) return json({ error: "MISSING_SHOP" }, { status: 400 });
   if (!productId) return json({ error: "MISSING_PRODUCT" }, { status: 400 });
 
   const store = await prisma.store.findUnique({ where: { shop } });
   if (!store) return json({ error: "UNKNOWN_SHOP" }, { status: 403 });
 
-  const gid = productId.startsWith("gid://") ? productId : `gid://shopify/Product/${productId}`;
+  const gid = productId.startsWith("gid://")
+    ? productId
+    : `gid://shopify/Product/${productId}`;
 
   try {
-    const { admin } = await unauthenticated.admin(shop);
     const response = await admin.graphql(
       `#graphql
       query CategoryProduct($id: ID!) {
@@ -63,6 +53,9 @@ export async function loader({ request }) {
       defaultAngles: config.defaultAngles,
     });
   } catch (error) {
-    return json({ error: "CATEGORY_LOOKUP_FAILED", message: error.message }, { status: 500 });
+    return json(
+      { error: "CATEGORY_LOOKUP_FAILED", message: error.message },
+      { status: 500 },
+    );
   }
 }
