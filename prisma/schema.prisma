@@ -36,6 +36,7 @@ model Plan {
   monthlyPrice      Float
   generationLimit   Int      // try-on generations included per billing cycle
   shopifyPlanHandle String   // must match the name used in appSubscriptionCreate
+  features          String[] @default([]) // e.g. "tryon" | "size_fit" | "multi_angle_spin" | "full_outfit" | "closet" | "video_tryon"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -65,6 +66,8 @@ model Store {
   updatedAt              DateTime  @updatedAt
 
   usageLogs             UsageLog[]
+  generations           Generation[]
+  productProfiles       ProductProfile[]
 }
 
 model UsageLog {
@@ -74,4 +77,40 @@ model UsageLog {
   productId  String
   angle      String
   createdAt  DateTime @default(now())
+}
+
+// One classified profile per product, cached so we don't re-classify on every generation.
+model ProductProfile {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  storeId       String   @db.ObjectId
+  store         Store    @relation(fields: [storeId], references: [id])
+  productId     String   // gid://shopify/Product/...
+  category      String   // "outfit" | "footwear" | "handbag" | "jewelry_necklace" | "jewelry_ear" | "jewelry_hand"
+  subcategory   String?  // "womens" | "mens" | "unisex"
+  source        String   @default("heuristic") // "heuristic" | "ai_vision" | "manual"
+  analyzedAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([storeId, productId])
+}
+
+// One row per generated result. We store the OUTPUT image only — never the
+// customer's uploaded source photo — to keep biometric-data exposure minimal.
+model Generation {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  storeId              String   @db.ObjectId
+  store                Store    @relation(fields: [storeId], references: [id])
+  productId            String
+  companionProductIds  String[] @default([]) // other products included in a full-outfit generation
+  category             String
+  angle                String   // "front" | "side" | "back" | ... | "video"
+  mediaType            String   @default("image") // "image" | "video"
+  imageUrl             String   // data URL or hosted URL of the OUTPUT only
+  shopifyCustomerId    String?  // set when the shopper is logged in
+  anonymousId          String   // always set — client-generated id, persisted in localStorage
+  planKeyAtGeneration  String
+  createdAt            DateTime @default(now())
+
+  @@index([storeId, productId, shopifyCustomerId])
+  @@index([storeId, productId, anonymousId])
 }

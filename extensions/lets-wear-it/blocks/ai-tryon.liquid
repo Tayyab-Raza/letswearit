@@ -1,10 +1,12 @@
 {%- comment -%}
   LetsWearIt AI Try-On app embed.
-  Enable once under Theme Editor → App embeds. Renders only on product
-  pages that have a front reference image saved (namespace "tryon").
+  Enable once under Theme Editor → App embeds. Renders on any product page —
+  the reference photo used is either the merchant-uploaded per-angle
+  metafield (apparel) or the product's featured image (footwear, bags,
+  jewelry), decided server-side in api.tryon.jsx.
 {%- endcomment -%}
 
-{%- if product and product.metafields.tryon.front_image != blank -%}
+{%- if product -%}
   {{ 'ai-tryon.css' | asset_url | stylesheet_tag }}
 
   <div
@@ -14,11 +16,34 @@
     data-product-title="{{ product.title | escape }}"
     data-shop="{{ shop.permanent_domain }}"
     data-tryon-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon"
+    data-tryon-video-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon/video"
+    data-tryon-sizefit-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/sizefit"
+    data-tryon-history-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon/history"
+    data-tryon-features-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon/features"
+    data-tryon-category-endpoint="https://directories-diverse-happy-perfect.trycloudflare.com/api/tryon/category"
     data-sample-photo-url="{{ block.settings.sample_photo_url | default: 'https://storage.googleapis.com/falserverless/example_inputs/model.png' }}"
+    {%- if customer %}
+    data-shopify-customer-id="{{ customer.id }}"
+    {%- endif %}
   >
+    <script type="application/json" data-tryon-companions>
+      [
+        {%- for companion in block.settings.companion_products -%}
+          {
+            "id": {{ companion.id | json }},
+            "title": {{ companion.title | json }},
+            "image": {{ companion.featured_image | image_url: width: 80 | json }}
+          }{%- unless forloop.last -%},{%- endunless -%}
+        {%- endfor -%}
+      ]
+    </script>
     <button type="button" class="tryon-cta" data-tryon-open>
       <span aria-hidden="true">✦</span>
       {{ block.settings.cta_label | default: 'Try It On' }}
+    </button>
+
+    <button type="button" class="tryon-closet-btn" data-tryon-closet-open hidden>
+      <span aria-hidden="true">🗂</span> My try-ons
     </button>
 
     <button type="button" class="tryon-overlay" data-tryon-overlay hidden aria-label="Close try-on"></button>
@@ -29,29 +54,47 @@
 
       <div class="tryon-step" data-step="intro">
         <h2>See this on you before you buy.</h2>
+        <div class="tryon-history-banner" data-tryon-history-banner hidden>
+          <img data-tryon-history-banner-img alt="Your last try-on" />
+          <span data-tryon-history-banner-text>You tried this on before</span>
+        </div>
         <div class="tryon-step-list">
-          <div><b>1</b><span>Upload a half or full length photo</span></div>
+          <div><b>1</b><span data-tryon-intro-step1>Upload a half or full length photo</span></div>
           <div><b>2</b><span>We show you exactly how it will look on you</span></div>
         </div>
       </div>
 
       <div class="tryon-step" data-step="upload" hidden>
-        <h2>Use a clear half-length or full-length photo</h2>
+        <h2 data-tryon-upload-title>Use a clear photo</h2>
         <div class="tryon-chips">
-          <span class="good">✓ Head to waist visible</span>
-          <span class="bad">× Cropped shoulders only</span>
+          <span class="good" data-tryon-photo-good>✓ Head to waist visible</span>
+          <span class="bad" data-tryon-photo-bad>× Cropped shoulders only</span>
         </div>
+
+        <div class="tryon-outfit-picker" data-tryon-outfit-picker hidden>
+          <div class="tryon-outfit-picker-label">
+            Complete the look
+            <span class="tryon-lock" data-tryon-outfit-lock hidden>Upgrade</span>
+          </div>
+          <div class="tryon-outfit-chips" data-tryon-outfit-chips></div>
+        </div>
+
         <button type="button" class="tryon-upload-box" data-tryon-upload-box>
           <img data-tryon-upload-preview alt="Uploaded try-on source" width="400" height="400" hidden />
           <span data-tryon-upload-placeholder>
             <strong>+</strong>
             <b>Tap to upload</b>
-            <span>Face and torso visible, good light, no heavy filters.</span>
+            <span data-tryon-upload-note>Face and torso visible, good light, no heavy filters.</span>
           </span>
         </button>
         <input type="file" class="tryon-file-input" accept="image/png,image/jpeg,image/webp" data-tryon-file-input hidden />
         <p class="tryon-error" data-tryon-error hidden></p>
         <button type="button" class="tryon-secondary" data-tryon-sample>Use sample photo</button>
+
+        <div data-tryon-sizefit-wrap hidden>
+          <button type="button" class="tryon-secondary" data-tryon-sizefit-btn>Get a size suggestion</button>
+          <p class="tryon-photo-hint" data-tryon-sizefit-result hidden></p>
+        </div>
       </div>
 
       <div class="tryon-step" data-step="processing" hidden>
@@ -77,22 +120,39 @@
           <button type="button" data-tryon-share>Share ↗</button>
         </div>
         <p class="tryon-demo-note" data-tryon-demo-note hidden></p>
-        <div class="tryon-angle-tabs" data-tryon-angle-tabs>
-          <button type="button" data-angle="front" class="active">Front</button>
-          <button type="button" data-angle="side">Side</button>
-          <button type="button" data-angle="back">Back</button>
-        </div>
-        <div class="tryon-result-image" data-tryon-result-image>
+
+        <div class="tryon-angle-tabs" data-tryon-angle-tabs></div>
+
+        <div class="tryon-result-image tryon-spin-viewer" data-tryon-result-image data-tryon-spin-viewer>
           <div class="tryon-angle-loading" data-tryon-angle-loading>
             <div class="tryon-mini-spinner"></div>
             <strong data-tryon-angle-loading-label>Front view is generating</strong>
           </div>
           <img data-tryon-result-img hidden alt="Generated AI try-on result" width="400" height="400" />
+          <span class="tryon-spin-hint" data-tryon-spin-hint hidden>↔ Drag to spin</span>
+        </div>
+
+        <button type="button" class="tryon-video-btn" data-tryon-video-btn hidden>
+          ▶ Generate a short turn video <span class="tryon-lock" data-tryon-video-lock hidden>Upgrade</span>
+        </button>
+        <div class="tryon-video-wrap" data-tryon-video-wrap hidden>
+          <video data-tryon-video-el controls playsinline></video>
         </div>
       </div>
 
       <button type="button" class="tryon-primary" data-tryon-primary disabled>Start Try On</button>
     </section>
+
+    <div class="tryon-closet-drawer" data-tryon-closet-drawer aria-hidden="true">
+      <button type="button" class="tryon-closet-overlay" data-tryon-closet-overlay aria-label="Close"></button>
+      <section class="tryon-closet-sheet">
+        <h3>Your try-ons</h3>
+        <div class="tryon-closet-grid" data-tryon-closet-grid></div>
+        <p class="tryon-closet-empty" data-tryon-closet-empty hidden>Nothing here yet — try something on to start your closet.</p>
+        <button type="button" class="tryon-closet-compare-btn" data-tryon-closet-compare hidden>Compare selected (2)</button>
+        <div class="tryon-compare-view" data-tryon-compare-view hidden></div>
+      </section>
+    </div>
   </div>
 
   <script src="{{ 'ai-tryon.js' | asset_url }}" defer="defer"></script>
@@ -113,6 +173,12 @@
       "type": "url",
       "id": "sample_photo_url",
       "label": "Sample photo URL (used for the demo/sample button)"
+    },
+    {
+      "type": "product_list",
+      "id": "companion_products",
+      "label": "Complete-the-look products (optional)",
+      "info": "Shown as an add-on for the full outfit try-on, on higher plans."
     }
   ]
 }

@@ -301,3 +301,240 @@
 }
 
 .tryon-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* --- Category-aware photo guidance --- */
+.tryon-photo-hint {
+  font-size: 11px;
+  color: var(--tryon-muted);
+  margin: -4px 0 10px;
+}
+
+/* --- Previous-generation banner (history) --- */
+.tryon-history-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--tryon-line);
+  border-radius: 12px;
+  background: var(--tryon-paper);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tryon-history-banner img {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.tryon-history-banner span { flex: 1; }
+
+/* --- Locked / upgrade-gated feature badge --- */
+.tryon-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--tryon-accent);
+  border: 1px solid var(--tryon-accent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-left: 6px;
+}
+
+/* --- Multi-angle spin viewer --- */
+.tryon-spin-viewer {
+  position: relative;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.tryon-spin-viewer:active { cursor: grabbing; }
+
+.tryon-spin-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* --- Full outfit picker --- */
+.tryon-outfit-picker {
+  margin-bottom: 12px;
+}
+
+.tryon-outfit-picker-label {
+  font-size: 11px;
+  color: var(--tryon-muted);
+  margin-bottom: 6px;
+}
+
+.tryon-outfit-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tryon-outfit-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--tryon-line);
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.tryon-outfit-chip img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.tryon-outfit-chip.selected {
+  border-color: var(--tryon-ink);
+  background: var(--tryon-ink);
+  color: #fff;
+}
+
+/* --- Video try-on --- */
+.tryon-video-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--tryon-line);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tryon-video-wrap {
+  margin-top: 10px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+}
+
+.tryon-video-wrap video { width: 100%; display: block; }
+
+/* --- Closet / compare drawer --- */
+.tryon-closet-btn {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  right: 24px;
+  z-index: 999;
+  transform: translateY(-58px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--tryon-ink);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tryon-ink);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.tryon-closet-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+}
+
+.tryon-closet-drawer.open { display: block; }
+
+.tryon-closet-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  border: 0;
+}
+
+.tryon-closet-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  padding: 16px 20px 24px;
+}
+
+.tryon-closet-sheet h3 { margin: 0 0 12px; font-size: 16px; }
+
+.tryon-closet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.tryon-closet-item {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.tryon-closet-item.selected { border-color: var(--tryon-accent); }
+
+.tryon-closet-item img,
+.tryon-closet-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tryon-closet-empty {
+  font-size: 12px;
+  color: var(--tryon-muted);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.tryon-closet-compare-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tryon-ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tryon-compare-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tryon-compare-view img { width: 100%; border-radius: 10px; object-fit: cover; }

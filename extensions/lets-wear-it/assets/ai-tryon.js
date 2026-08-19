@@ -1,7 +1,30 @@
 (function () {
   "use strict";
 
-  const ANGLE_LABELS = { front: "Front", side: "Side", back: "Back" };
+  const ANGLE_LABELS = {
+    front: "Front",
+    side: "Side",
+    back: "Back",
+    three_quarter_left: "3/4 Left",
+    three_quarter_right: "3/4 Right",
+    back_side: "Back 3/4",
+  };
+
+  const ANON_ID_KEY = "letswearit_anon_id";
+
+  function getAnonymousId() {
+    try {
+      let id = window.localStorage.getItem(ANON_ID_KEY);
+      if (!id) {
+        id = "anon_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        window.localStorage.setItem(ANON_ID_KEY, id);
+      }
+      return id;
+    } catch {
+      // Storage blocked (private mode, etc.) — fall back to a per-page id.
+      return "anon_" + Math.random().toString(36).slice(2);
+    }
+  }
 
   document.querySelectorAll(".tryon-root").forEach(initTryOnWidget);
 
@@ -10,10 +33,26 @@
     const productTitle = root.dataset.productTitle || "";
     const shop = root.dataset.shop;
     const endpoint = root.dataset.tryonEndpoint;
+    const videoEndpoint = root.dataset.tryonVideoEndpoint;
+    const sizefitEndpoint = root.dataset.tryonSizefitEndpoint;
+    const historyEndpoint = root.dataset.tryonHistoryEndpoint;
+    const featuresEndpoint = root.dataset.tryonFeaturesEndpoint;
+    const categoryEndpoint = root.dataset.tryonCategoryEndpoint;
     const samplePhotoUrl = root.dataset.samplePhotoUrl;
+    const shopifyCustomerId = root.dataset.shopifyCustomerId || null;
+    const anonymousId = getAnonymousId();
+
+    let companions = [];
+    try {
+      const raw = root.querySelector("[data-tryon-companions]");
+      companions = raw ? JSON.parse(raw.textContent || "[]") : [];
+    } catch {
+      companions = [];
+    }
 
     const els = {
       cta: root.querySelector("[data-tryon-open]"),
+      closetOpenBtn: root.querySelector("[data-tryon-closet-open]"),
       overlay: root.querySelector("[data-tryon-overlay]"),
       sheet: root.querySelector("[data-tryon-sheet]"),
       close: root.querySelector("[data-tryon-close]"),
@@ -24,6 +63,16 @@
         processing: root.querySelector('[data-step="processing"]'),
         result: root.querySelector('[data-step="result"]'),
       },
+      historyBanner: root.querySelector("[data-tryon-history-banner]"),
+      historyBannerImg: root.querySelector("[data-tryon-history-banner-img]"),
+      historyBannerText: root.querySelector("[data-tryon-history-banner-text]"),
+      photoGood: root.querySelector("[data-tryon-photo-good]"),
+      photoBad: root.querySelector("[data-tryon-photo-bad]"),
+      uploadTitle: root.querySelector("[data-tryon-upload-title]"),
+      uploadNote: root.querySelector("[data-tryon-upload-note]"),
+      outfitPicker: root.querySelector("[data-tryon-outfit-picker]"),
+      outfitLock: root.querySelector("[data-tryon-outfit-lock]"),
+      outfitChips: root.querySelector("[data-tryon-outfit-chips]"),
       uploadBox: root.querySelector("[data-tryon-upload-box]"),
       uploadPreview: root.querySelector("[data-tryon-upload-preview]"),
       uploadPlaceholder: root.querySelector("[data-tryon-upload-placeholder]"),
@@ -31,12 +80,27 @@
       error: root.querySelector("[data-tryon-error]"),
       sampleBtn: root.querySelector("[data-tryon-sample]"),
       demoNote: root.querySelector("[data-tryon-demo-note]"),
+      sizefitWrap: root.querySelector("[data-tryon-sizefit-wrap]"),
+      sizefitBtn: root.querySelector("[data-tryon-sizefit-btn]"),
+      sizefitResult: root.querySelector("[data-tryon-sizefit-result]"),
       angleTabs: root.querySelector("[data-tryon-angle-tabs]"),
       resultImage: root.querySelector("[data-tryon-result-image]"),
+      spinViewer: root.querySelector("[data-tryon-spin-viewer]"),
+      spinHint: root.querySelector("[data-tryon-spin-hint]"),
       resultImg: root.querySelector("[data-tryon-result-img]"),
       angleLoading: root.querySelector("[data-tryon-angle-loading]"),
       angleLoadingLabel: root.querySelector("[data-tryon-angle-loading-label]"),
       shareBtn: root.querySelector("[data-tryon-share]"),
+      videoBtn: root.querySelector("[data-tryon-video-btn]"),
+      videoLock: root.querySelector("[data-tryon-video-lock]"),
+      videoWrap: root.querySelector("[data-tryon-video-wrap]"),
+      videoEl: root.querySelector("[data-tryon-video-el]"),
+      closetDrawer: root.querySelector("[data-tryon-closet-drawer]"),
+      closetOverlay: root.querySelector("[data-tryon-closet-overlay]"),
+      closetGrid: root.querySelector("[data-tryon-closet-grid]"),
+      closetEmpty: root.querySelector("[data-tryon-closet-empty]"),
+      closetCompareBtn: root.querySelector("[data-tryon-closet-compare]"),
+      compareView: root.querySelector("[data-tryon-compare-view]"),
     };
 
     const state = {
@@ -46,7 +110,143 @@
       resultImages: {},
       angleStatus: {},
       activeAngle: "front",
+      features: [],
+      category: null,
+      categoryConfig: null,
+      selectedCompanionIds: [],
+      closetSelection: [],
     };
+
+    function hasFeature(key) {
+      return state.features.includes(key);
+    }
+
+    // --- Setup fetches (run in parallel on first open) ---
+
+    async function loadFeatures() {
+      try {
+        const res = await fetch(`${featuresEndpoint}?shop=${encodeURIComponent(shop)}`);
+        const data = await res.json();
+        state.features = data.features || [];
+      } catch {
+        state.features = [];
+      }
+      els.closetOpenBtn.hidden = !hasFeature("closet");
+    }
+
+    async function loadCategory() {
+      try {
+        const res = await fetch(
+          `${categoryEndpoint}?shop=${encodeURIComponent(shop)}&productId=${encodeURIComponent(productId)}`,
+        );
+        const data = await res.json();
+        if (data.category) {
+          state.category = data.category;
+          state.categoryConfig = data;
+          state.activeAngle = data.defaultAngles[0] || "front";
+        }
+      } catch {
+        // Fall back to generic apparel copy/angles already in the markup.
+        state.categoryConfig = {
+          photoHint: "Head to at least the waist visible.",
+          photoBad: "Cropped shoulders only, heavy filters.",
+          angles: ["front", "side", "back"],
+          defaultAngles: ["front", "side", "back"],
+        };
+      }
+      applyCategoryUi();
+    }
+
+    function applyCategoryUi() {
+      const cfg = state.categoryConfig;
+      if (!cfg) return;
+      els.photoGood.textContent = `✓ ${cfg.photoHint}`;
+      els.photoBad.textContent = `× ${cfg.photoBad}`;
+      els.uploadNote.textContent = cfg.photoHint;
+      if (state.category === "footwear") {
+        els.uploadTitle.textContent = "Use a photo with both feet visible";
+      } else if (state.category === "handbag") {
+        els.uploadTitle.textContent = "Use a photo with your hand visible";
+      } else if (state.category && state.category.startsWith("jewelry")) {
+        els.uploadTitle.textContent = "Use a close, well-lit photo";
+      } else {
+        els.uploadTitle.textContent = "Use a clear half-length or full-length photo";
+      }
+
+      const showOutfitPicker = companions.length > 0 && state.category === "outfit";
+      els.outfitPicker.hidden = !showOutfitPicker;
+      if (showOutfitPicker) {
+        els.outfitLock.hidden = hasFeature("full_outfit");
+        renderOutfitChips();
+      }
+
+      const showVideoBtn = state.step === "result";
+      els.videoLock.hidden = hasFeature("video_tryon");
+      if (showVideoBtn) els.videoBtn.hidden = false;
+    }
+
+    function renderOutfitChips() {
+      els.outfitChips.innerHTML = "";
+      companions.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tryon-outfit-chip";
+        btn.dataset.companionId = c.id;
+        if (c.image) {
+          const img = document.createElement("img");
+          img.src = c.image;
+          img.alt = c.title || "";
+          btn.appendChild(img);
+        }
+        const span = document.createElement("span");
+        span.textContent = c.title || "Item";
+        btn.appendChild(span);
+        btn.addEventListener("click", () => {
+          if (!hasFeature("full_outfit")) {
+            showError("Full outfit try-on is available on a higher plan.");
+            return;
+          }
+          const idx = state.selectedCompanionIds.indexOf(c.id);
+          if (idx === -1) state.selectedCompanionIds.push(c.id);
+          else state.selectedCompanionIds.splice(idx, 1);
+          btn.classList.toggle("selected");
+        });
+        els.outfitChips.appendChild(btn);
+      });
+    }
+
+    async function loadHistory() {
+      try {
+        const params = new URLSearchParams({
+          shop,
+          productId,
+          anonymousId,
+          scope: "product",
+        });
+        if (shopifyCustomerId) params.set("shopifyCustomerId", shopifyCustomerId);
+        const res = await fetch(`${historyEndpoint}?${params.toString()}`);
+        const data = await res.json();
+        const latest = (data.generations || [])[0];
+        if (latest) {
+          els.historyBanner.hidden = false;
+          els.historyBannerImg.src = latest.imageUrl;
+          els.historyBannerText.textContent = "You tried this on before — tap to view";
+          els.historyBanner.onclick = () => {
+            state.resultImages = { [latest.angle]: latest.imageUrl };
+            state.angleStatus = { [latest.angle]: "ready" };
+            state.activeAngle = latest.angle;
+            state.step = "result";
+            render();
+          };
+        } else {
+          els.historyBanner.hidden = true;
+        }
+      } catch {
+        els.historyBanner.hidden = true;
+      }
+    }
+
+    // --- Standard open/close ---
 
     els.cta.addEventListener("click", openSheet);
     els.overlay.addEventListener("click", closeSheet);
@@ -56,17 +256,25 @@
     els.sampleBtn.addEventListener("click", useSamplePhoto);
     els.primary.addEventListener("click", handlePrimary);
     els.shareBtn.addEventListener("click", handleShare);
-    els.angleTabs.querySelectorAll("[data-angle]").forEach((btn) => {
-      btn.addEventListener("click", () => setActiveAngle(btn.dataset.angle));
-    });
+    els.sizefitBtn.addEventListener("click", handleSizeFit);
+    els.videoBtn.addEventListener("click", handleVideo);
+    els.closetOpenBtn.addEventListener("click", openCloset);
+    els.closetOverlay.addEventListener("click", closeCloset);
 
-    function openSheet() {
+    let setupLoaded = false;
+    async function openSheet() {
       state.step = "intro";
       showError("");
       els.overlay.hidden = false;
       els.sheet.classList.add("open");
       els.sheet.setAttribute("aria-hidden", "false");
       render();
+
+      if (!setupLoaded) {
+        setupLoaded = true;
+        await Promise.all([loadFeatures(), loadCategory()]);
+        loadHistory();
+      }
     }
 
     function closeSheet() {
@@ -135,6 +343,7 @@
       els.uploadPlaceholder.hidden = true;
       state.uploadData = compressed;
       state.sampleImageUrl = "";
+      els.sizefitWrap.hidden = false;
       updatePrimaryState();
     }
 
@@ -145,8 +354,45 @@
       els.uploadPlaceholder.hidden = true;
       state.uploadData = "sample";
       state.sampleImageUrl = samplePhotoUrl;
+      els.sizefitWrap.hidden = false;
       updatePrimaryState();
     }
+
+    // --- Size & fit (basic-plan feature) ---
+
+    async function handleSizeFit() {
+      if (!state.uploadData) return;
+      els.sizefitBtn.disabled = true;
+      els.sizefitBtn.textContent = "Checking fit...";
+      els.sizefitResult.hidden = true;
+      try {
+        const res = await fetch(sizefitEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shop,
+            productId,
+            imageDataUrl: state.sampleImageUrl ? null : state.uploadData,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Could not estimate size.");
+        els.sizefitResult.hidden = false;
+        if (data.needsSizeChart || !data.suggestedSize) {
+          els.sizefitResult.textContent = data.note || "Check the product's size chart for this item.";
+        } else {
+          els.sizefitResult.textContent = `Likely fits: ${data.suggestedSize} (${data.confidence} confidence). ${data.note}`;
+        }
+      } catch (err) {
+        els.sizefitResult.hidden = false;
+        els.sizefitResult.textContent = err.message || "Could not estimate size right now.";
+      } finally {
+        els.sizefitBtn.disabled = false;
+        els.sizefitBtn.textContent = "Get a size suggestion";
+      }
+    }
+
+    // --- Generation ---
 
     async function generateAngle(angle) {
       const response = await fetch(endpoint, {
@@ -154,7 +400,14 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           Object.assign(
-            { angle, productId, shop },
+            {
+              angle,
+              productId,
+              shop,
+              anonymousId,
+              shopifyCustomerId,
+              companionProductIds: state.selectedCompanionIds,
+            },
             state.sampleImageUrl
               ? { sampleImageUrl: state.sampleImageUrl }
               : { imageDataUrl: state.uploadData },
@@ -169,9 +422,13 @@
             "This store has reached its AI try-on limit for now. Please check back later.",
         );
       }
+      if (response.status === 403 && payload.error === "UPGRADE_REQUIRED") {
+        throw new Error(payload.message || "This option needs a higher plan.");
+      }
       if (!response.ok || !payload.imageUrl) {
         throw new Error(payload.message || "Generation failed");
       }
+      if (payload.category) state.category = payload.category;
       return payload.imageUrl;
     }
 
@@ -189,35 +446,40 @@
       if (state.activeAngle === angle) renderResultImage();
     }
 
+    function defaultAngleSet() {
+      return (state.categoryConfig && state.categoryConfig.defaultAngles) || ["front", "side", "back"];
+    }
+
     async function generateTryOn() {
       if (!state.uploadData) {
         els.fileInput.click();
         return;
       }
 
+      const angles = defaultAngleSet();
       state.step = "processing";
       showError("");
-      state.activeAngle = "front";
+      state.activeAngle = angles[0];
       state.resultImages = {};
-      state.angleStatus = { front: "loading", side: "queued", back: "queued" };
+      state.angleStatus = {};
+      angles.forEach((a, i) => (state.angleStatus[a] = i === 0 ? "loading" : "queued"));
       render();
 
       try {
-        const frontImageUrl = await generateAngle("front");
-        state.resultImages = { front: frontImageUrl };
-        state.angleStatus = { front: "ready", side: "loading", back: "queued" };
+        const firstUrl = await generateAngle(angles[0]);
+        state.resultImages[angles[0]] = firstUrl;
+        state.angleStatus[angles[0]] = "ready";
+        angles.slice(1).forEach((a) => (state.angleStatus[a] = "loading"));
         state.step = "result";
         render();
-        generateBackgroundAngle("side");
-        window.setTimeout(() => generateBackgroundAngle("back"), 1200);
+        angles.slice(1).forEach((a, i) => {
+          window.setTimeout(() => generateBackgroundAngle(a), (i + 1) * 900);
+        });
       } catch (err) {
         state.step = "result";
         state.resultImages = {};
-        state.angleStatus = { front: "failed", side: "failed", back: "failed" };
-        showResultError(
-          err.message ||
-            "We could not generate this try-on. Please try another photo.",
-        );
+        angles.forEach((a) => (state.angleStatus[a] = "failed"));
+        showResultError(err.message || "We could not generate this try-on. Please try another photo.");
         render();
       }
     }
@@ -251,9 +513,7 @@
     async function handleShare() {
       const resultImage = state.resultImages[state.activeAngle];
       if (!resultImage) return;
-      const url = resultImage.startsWith("http")
-        ? resultImage
-        : window.location.href;
+      const url = resultImage.startsWith("http") ? resultImage : window.location.href;
       if (navigator.share) {
         await navigator.share({
           title: "My AI Try On",
@@ -268,21 +528,23 @@
       }
     }
 
-    function setActiveAngle(angle) {
-      state.activeAngle = angle;
-      renderAngleTabs();
-      renderResultImage();
-    }
+    // --- Angle tabs (default set only — extra angles live behind the spin drag) ---
 
     function renderAngleTabs() {
-      els.angleTabs.querySelectorAll("[data-angle]").forEach((btn) => {
-        const angle = btn.dataset.angle;
-        btn.classList.toggle("active", angle === state.activeAngle);
-        btn.querySelectorAll("span").forEach((s) => s.remove());
+      const angles = defaultAngleSet();
+      els.angleTabs.innerHTML = "";
+      angles.forEach((angle) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.angle = angle;
+        btn.textContent = ANGLE_LABELS[angle] || angle;
+        if (angle === state.activeAngle) btn.classList.add("active");
         const status = state.angleStatus[angle];
         if (status === "loading") appendTag(btn, "Generating");
         if (status === "queued") appendTag(btn, "Queued");
         if (status === "failed") appendTag(btn, "Retry later");
+        btn.addEventListener("click", () => setActiveAngle(angle));
+        els.angleTabs.appendChild(btn);
       });
     }
 
@@ -301,14 +563,177 @@
       } else {
         els.resultImg.hidden = true;
         els.angleLoading.hidden = false;
-        els.angleLoadingLabel.textContent = `${ANGLE_LABELS[state.activeAngle]} view is generating`;
+        els.angleLoadingLabel.textContent = `${ANGLE_LABELS[state.activeAngle] || state.activeAngle} view is generating`;
       }
     }
 
+    function setActiveAngle(angle) {
+      state.activeAngle = angle;
+      renderAngleTabs();
+      renderResultImage();
+    }
+
+    // --- Multi-angle spin viewer (higher-tier feature) ---
+
+    let dragStartX = null;
+
+    function fullAngleList() {
+      return (state.categoryConfig && state.categoryConfig.angles) || defaultAngleSet();
+    }
+
+    function initSpinViewer() {
+      const canSpin = hasFeature("multi_angle_spin") && fullAngleList().length > defaultAngleSet().length;
+      els.spinHint.hidden = !canSpin;
+      if (!canSpin) return;
+
+      els.spinViewer.onpointerdown = (e) => {
+        dragStartX = e.clientX;
+      };
+      els.spinViewer.onpointerup = (e) => {
+        if (dragStartX === null) return;
+        const delta = e.clientX - dragStartX;
+        dragStartX = null;
+        if (Math.abs(delta) < 40) return;
+        stepSpin(delta < 0 ? 1 : -1);
+      };
+    }
+
+    function stepSpin(direction) {
+      const angles = fullAngleList();
+      const currentIndex = angles.indexOf(state.activeAngle);
+      const nextIndex = Math.min(angles.length - 1, Math.max(0, currentIndex + direction));
+      const nextAngle = angles[nextIndex];
+      if (nextAngle === state.activeAngle) return;
+
+      state.activeAngle = nextAngle;
+      if (!state.resultImages[nextAngle] && state.angleStatus[nextAngle] !== "loading") {
+        generateBackgroundAngle(nextAngle);
+      }
+      renderResultImage();
+      renderAngleTabs();
+    }
+
+    // --- Video try-on (top-tier feature) ---
+
+    async function handleVideo() {
+      if (!hasFeature("video_tryon")) {
+        showResultError("Video try-on is available on the top plan.");
+        return;
+      }
+      const stillImageDataUrl = state.resultImages[state.activeAngle];
+      if (!stillImageDataUrl) return;
+
+      els.videoBtn.disabled = true;
+      els.videoBtn.textContent = "Generating video...";
+      try {
+        const res = await fetch(videoEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shop,
+            productId,
+            category: state.category,
+            stillImageDataUrl,
+            productTitle,
+            shopifyCustomerId,
+            anonymousId,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Could not generate the video.");
+        els.videoEl.src = data.videoUrl;
+        els.videoWrap.hidden = false;
+        els.videoBtn.hidden = true;
+      } catch (err) {
+        showResultError(err.message || "Could not generate the video right now.");
+      } finally {
+        els.videoBtn.disabled = false;
+        els.videoBtn.textContent = "▶ Generate a short turn video";
+      }
+    }
+
+    // --- Closet / compare drawer ---
+
+    async function openCloset() {
+      els.closetDrawer.classList.add("open");
+      els.closetDrawer.setAttribute("aria-hidden", "false");
+      state.closetSelection = [];
+      els.compareView.hidden = true;
+      els.closetCompareBtn.hidden = true;
+
+      try {
+        const params = new URLSearchParams({ shop, anonymousId, scope: "closet" });
+        if (shopifyCustomerId) params.set("shopifyCustomerId", shopifyCustomerId);
+        const res = await fetch(`${historyEndpoint}?${params.toString()}`);
+        const data = await res.json();
+        renderCloset(data.generations || []);
+      } catch {
+        renderCloset([]);
+      }
+    }
+
+    function closeCloset() {
+      els.closetDrawer.classList.remove("open");
+      els.closetDrawer.setAttribute("aria-hidden", "true");
+    }
+
+    function renderCloset(generations) {
+      els.closetGrid.innerHTML = "";
+      els.closetEmpty.hidden = generations.length > 0;
+      generations.forEach((gen) => {
+        const item = document.createElement("div");
+        item.className = "tryon-closet-item";
+        item.dataset.id = gen.id;
+        if (gen.mediaType === "video") {
+          const video = document.createElement("video");
+          video.src = gen.imageUrl;
+          video.muted = true;
+          item.appendChild(video);
+        } else {
+          const img = document.createElement("img");
+          img.src = gen.imageUrl;
+          img.alt = "";
+          item.appendChild(img);
+        }
+        item.addEventListener("click", () => toggleCompareSelection(item, gen));
+        els.closetGrid.appendChild(item);
+      });
+    }
+
+    function toggleCompareSelection(item, gen) {
+      const idx = state.closetSelection.findIndex((g) => g.id === gen.id);
+      if (idx > -1) {
+        state.closetSelection.splice(idx, 1);
+        item.classList.remove("selected");
+      } else {
+        if (state.closetSelection.length >= 2) {
+          const removedId = state.closetSelection.shift().id;
+          const removedEl = els.closetGrid.querySelector(`[data-id="${removedId}"]`);
+          if (removedEl) removedEl.classList.remove("selected");
+        }
+        state.closetSelection.push(gen);
+        item.classList.add("selected");
+      }
+      els.closetCompareBtn.hidden = state.closetSelection.length < 2;
+      els.compareView.hidden = true;
+    }
+
+    els.closetCompareBtn.addEventListener("click", () => {
+      els.compareView.innerHTML = "";
+      state.closetSelection.forEach((gen) => {
+        const img = document.createElement("img");
+        img.src = gen.imageUrl;
+        img.alt = "";
+        els.compareView.appendChild(img);
+      });
+      els.compareView.hidden = false;
+    });
+
+    // --- Render ---
+
     function updatePrimaryState() {
       els.primary.disabled =
-        state.step === "processing" ||
-        (state.step === "upload" && !state.uploadData);
+        state.step === "processing" || (state.step === "upload" && !state.uploadData);
       const labels = {
         intro: "Start Try On",
         upload: state.uploadData ? "Generate Look" : "Upload Photo",
@@ -322,9 +747,14 @@
       Object.keys(els.steps).forEach((key) => {
         els.steps[key].hidden = key !== state.step;
       });
+      if (state.step === "upload") applyCategoryUi();
       if (state.step === "result") {
         renderAngleTabs();
         renderResultImage();
+        initSpinViewer();
+        els.videoBtn.hidden = false;
+        els.videoLock.hidden = hasFeature("video_tryon");
+        els.videoWrap.hidden = true;
       }
       updatePrimaryState();
     }

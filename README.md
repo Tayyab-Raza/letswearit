@@ -1,236 +1,181 @@
-# Shopify App Template - React Router
+# LetsWearIt
 
-This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
+AI virtual try-on for Shopify. A shopper uploads a photo, the app generates
+a realistic image of them wearing the product, and — depending on the
+merchant's plan — a lot more on top of that: size guidance, multiple
+angles, full outfits, a saved closet, and short try-on videos.
 
-Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).
+Built on the Shopify App Template (React Router + Prisma + MongoDB), with
+a storefront theme app extension for the customer-facing widget.
 
-Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
+## What it does
 
-## Upgrading from Remix
+- **AI try-on** — customer uploads a photo (or uses a sample), the app
+  composites the product onto them using Gemini's image model.
+- **Category-aware compositing** — a product isn't just "a garment." The
+  app classifies each product into one of six categories (`outfit`,
+  `footwear`, `handbag`, `jewelry_necklace`, `jewelry_ear`, `jewelry_hand`)
+  and anchors the generation accordingly — a necklace goes on the neck, a
+  shoe replaces the shoe on both feet, a ring goes on the hand — with
+  matching photo-upload guidance for each ("show both feet" vs. "show your
+  neckline" vs. "show your hand").
+- **Size & fit guidance** — a conservative size suggestion estimated from
+  the customer's photo, mapped onto the merchant's size chart when one is
+  set.
+- **Multi-angle spin viewer** — drag to rotate through several generated
+  angles per product instead of a single static shot.
+- **Full outfit try-on** — combine multiple products (e.g. top + bottom, or
+  an outfit + a bag) into one generation instead of one item at a time.
+- **Try-on history & closet** — a shopper's past try-ons on a product (and
+  across the whole store) are saved and can be revisited or compared
+  side-by-side, without needing an account — identity is a persistent
+  anonymous ID, upgraded to their Shopify customer ID when they're logged
+  in.
+- **Short try-on video** — a brief turn/rotation clip generated from an
+  already-approved still, via Veo through the Gemini API.
+- **Usage-based billing** — three plans, a free trial, usage warning/limit
+  emails, and per-feature gating so add-ons are tied to plan tier.
 
-If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix). Otherwise, please follow the quick start guide below.
+## Plan tiers
 
-## Quick start
+| Feature | Starter | Growth | Pro |
+|---|---|---|---|
+| AI try-on | ✅ | ✅ | ✅ |
+| Size & fit guidance | ✅ | ✅ | ✅ |
+| Multi-angle spin viewer | – | ✅ | ✅ |
+| Full outfit try-on | – | ✅ | ✅ |
+| Try-on history & closet | – | ✅ | ✅ |
+| Short try-on video | – | – | ✅ |
 
-### Prerequisites
+Every feature is unlocked during the free trial so merchants can evaluate
+the full app before choosing a plan. Edit `prisma/seed.js` to change the
+mapping, or `TRIAL_FEATURES` in `app/services/plan.server.js` to change
+trial behavior.
 
-Before you begin, you'll need to [download and install the Shopify CLI](https://shopify.dev/docs/apps/tools/cli/getting-started) if you haven't already.
+## Architecture
 
-### Setup
+```
+app/
+  routes/
+    api.tryon.jsx            # main generation endpoint (single item + full outfit)
+    api.sizefit.jsx           # size & fit estimate
+    api.tryon.video.jsx       # short turn video from an approved still
+    api.tryon.category.jsx    # product → category + photo guidance (pre-upload)
+    api.tryon.features.jsx    # which add-ons this store's plan unlocks
+    api.tryon.history.jsx     # past generations — per-product or full closet
+    app.*                     # merchant admin (Shopify-embedded)
+    webhooks.*                # app lifecycle + subscription webhooks
+  services/
+    category.server.js        # product → category classifier (+ cache)
+    tryon-prompts.server.js    # per-category prompts, anchors, photo requirements
+    sizefit.server.js          # size estimate via Gemini
+    video.server.js            # Veo 3.1 via the Gemini API
+    generation.server.js       # save/query stored try-on results
+    usage.server.js            # per-store generation limits + threshold emails
+    plan.server.js             # feature gating (hasFeature/requireFeature)
+    store.server.js            # install/trial lifecycle
+    email.server.js            # usage & trial emails (Resend)
 
-```shell
-shopify app init --template=https://github.com/Shopify/shopify-app-template-react-router
+extensions/lets-wear-it/       # storefront theme app extension (the widget)
+  blocks/ai-tryon.liquid
+  assets/ai-tryon.js
+  assets/ai-tryon.css
+
+prisma/schema.prisma            # Store, Plan, Generation, ProductProfile, UsageLog
 ```
 
-### Local Development
+### How a generation request flows
 
-```shell
+1. Widget opens → fetches the store's unlocked `features` and the
+   product's `category` (with photo guidance) in parallel.
+2. Customer uploads a photo → optionally requests a size suggestion.
+3. Customer hits generate → `api.tryon.jsx`:
+   - checks the store's usage limit
+   - classifies the product's category (cached after the first time)
+   - gates the requested angle / full-outfit request against the store's
+     plan features
+   - builds the category-specific prompt and calls Gemini's image model
+   - on success, records usage and saves the **output** image to
+     `Generation` (the customer's uploaded source photo is never stored)
+4. Widget shows the result, offers additional angles (drag to spin),
+   video, add-to-cart, and share.
+
+### Identity & history
+
+Shoppers on a product page usually aren't logged in, so history isn't
+keyed on `customer.id` alone. The widget generates a persistent anonymous
+ID on first open (stored in `localStorage`) and sends it with every
+request; it's paired with the Shopify customer ID when one is available.
+`Generation` rows are queried by either, so a returning shopper — logged
+in or not — sees their past try-ons on that product and in their closet.
+
+## Setup
+
+```bash
+npm install
+npx prisma generate
+npx prisma db push
+npm run setup       # generates the Prisma client + seeds Plan rows
 shopify app dev
 ```
 
-Press P to open the URL to your app. Once you click install, you can start development.
-
-Local development is powered by [the Shopify CLI](https://shopify.dev/docs/apps/tools/cli). It logs into your account, connects to an app, provides environment variables, updates remote config, creates a tunnel and provides commands to generate extensions.
-
-### Authenticating and querying data
-
-To authenticate and query data you can use the `shopify` const that is exported from `/app/shopify.server.js`:
-
-```js
-export async function loader({ request }) {
-  const { admin } = await shopify.authenticate.admin(request);
-
-  const response = await admin.graphql(`
-    {
-      products(first: 25) {
-        nodes {
-          title
-          description
-        }
-      }
-    }`);
-
-  const {
-    data: {
-      products: { nodes },
-    },
-  } = await response.json();
-
-  return nodes;
-}
-```
-
-This template comes pre-configured with examples of:
-
-1. Setting up your Shopify app in [/app/shopify.server.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/shopify.server.ts)
-2. Querying data using Graphql. Please see: [/app/routes/app.\_index.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/app._index.tsx).
-3. Responding to webhooks. Please see [/app/routes/webhooks.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/webhooks.app.uninstalled.tsx).
-
-Please read the [documentation for @shopify/shopify-app-react-router](https://shopify.dev/docs/api/shopify-app-react-router) to see what other API's are available.
-
-## Shopify Dev MCP
-
-This template is configured with the Shopify Dev MCP. This instructs [Cursor](https://cursor.com/), [GitHub Copilot](https://github.com/features/copilot) and [Claude Code](https://claude.com/product/claude-code) and [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) to use the Shopify Dev MCP.
-
-For more information on the Shopify Dev MCP please read [the documentation](https://shopify.dev/docs/apps/build/devmcp).
-
-## Deployment
-
-### Application Storage
-
-This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
-The database is defined as a Prisma schema in `prisma/schema.prisma`.
-
-This use of SQLite works in production if your app runs as a single instance.
-The database that works best for you depends on the data your app needs and how it is queried.
-Here’s a short list of databases providers that provide a free tier to get started:
-
-| Database   | Type             | Hosters                                                                                                                                                                                                                                    |
-| ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MySQL      | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mysql), [Planet Scale](https://planetscale.com/), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/mysql) |
-| PostgreSQL | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-postgresql), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/postgres)                                   |
-| Redis      | Key-value        | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-redis), [Amazon MemoryDB](https://aws.amazon.com/memorydb/)                                                                                                        |
-| MongoDB    | NoSQL / Document | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mongodb), [MongoDB Atlas](https://www.mongodb.com/atlas/database)                                                                                                  |
-
-To use one of these, you can use a different [datasource provider](https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#datasource) in your `schema.prisma` file, or a different [SessionStorage adapter package](https://github.com/Shopify/shopify-api-js/blob/main/packages/shopify-api/docs/guides/session-storage.md).
-
-### Build
-
-Build the app by running the command below with the package manager of your choice:
-
-Using yarn:
-
-```shell
-yarn build
-```
-
-Using npm:
-
-```shell
-npm run build
-```
-
-Using pnpm:
-
-```shell
-pnpm run build
-```
-
-## Hosting
-
-When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/launch/deployment) to host it externally. From there, you have a few options:
-
-- [Google Cloud Run](https://shopify.dev/docs/apps/launch/deployment/deploy-to-google-cloud-run): This tutorial is written specifically for this example repo, and is compatible with the extended steps included in the subsequent [**Build your app**](tutorial) in the **Getting started** docs. It is the most detailed tutorial for taking a React Router-based Shopify app and deploying it to production. It includes configuring permissions and secrets, setting up a production database, and even hosting your apps behind a load balancer across multiple regions.
-- [Fly.io](https://fly.io/docs/js/shopify/): Leverages the Fly.io CLI to quickly launch Shopify apps to a single machine.
-- [Render](https://render.com/docs/deploy-shopify-app): This tutorial guides you through using Docker to deploy and install apps on a Dev store.
-- [Manual deployment guide](https://shopify.dev/docs/apps/launch/deployment/deploy-to-hosting-service): This resource provides general guidance on the requirements of deployment including environment variables, secrets, and persistent data.
-
-When you reach the step for [setting up environment variables](https://shopify.dev/docs/apps/deployment/web#set-env-vars), you also need to set the variable `NODE_ENV=production`.
-
-## Gotchas / Troubleshooting
-
-### Database tables don't exist
-
-If you get an error like:
-
-```
-The table `main.Session` does not exist in the current database.
-```
-
-Create the database for Prisma. Run the `setup` script in `package.json` using `npm`, `yarn` or `pnpm`.
-
-### Navigating/redirecting breaks an embedded app
-
-Embedded apps must maintain the user session, which can be tricky inside an iFrame. To avoid issues:
-
-1. Use `Link` from `react-router` or `@shopify/polaris`. Do not use `<a>`.
-2. Use `redirect` returned from `authenticate.admin`. Do not use `redirect` from `react-router`
-3. Use `useSubmit` from `react-router`.
-
-This only applies if your app is embedded, which it will be by default.
-
-### Webhooks: shop-specific webhook subscriptions aren't updated
-
-If you are registering webhooks in the `afterAuth` hook, using `shopify.registerWebhooks`, you may find that your subscriptions aren't being updated.
-
-Instead of using the `afterAuth` hook declare app-specific webhooks in the `shopify.app.toml` file. This approach is easier since Shopify will automatically sync changes every time you run `deploy` (e.g: `npm run deploy`). Please read these guides to understand more:
-
-1. [app-specific vs shop-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions)
-2. [Create a subscription tutorial](https://shopify.dev/docs/apps/build/webhooks/subscribe/get-started?deliveryMethod=https)
-
-If you do need shop-specific webhooks, keep in mind that the package calls `afterAuth` in 2 scenarios:
-
-- After installing the app
-- When an access token expires
-
-During normal development, the app won't need to re-authenticate most of the time, so shop-specific subscriptions aren't updated. To force your app to update the subscriptions, uninstall and reinstall the app. Revisiting the app will call the `afterAuth` hook.
-
-### Webhooks: Admin created webhook failing HMAC validation
-
-Webhooks subscriptions created in the [Shopify admin](https://help.shopify.com/en/manual/orders/notifications/webhooks) will fail HMAC validation. This is because the webhook payload is not signed with your app's secret key.
-
-The recommended solution is to use [app-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions) defined in your toml file instead. Test your webhooks by triggering events manually in the Shopify admin(e.g. Updating the product title to trigger a `PRODUCTS_UPDATE`).
-
-### Webhooks: Admin object undefined on webhook events triggered by the CLI
-
-When you trigger a webhook event using the Shopify CLI, the `admin` object will be `undefined`. This is because the CLI triggers an event with a valid, but non-existent, shop. The `admin` object is only available when the webhook is triggered by a shop that has installed the app. This is expected.
-
-Webhooks triggered by the CLI are intended for initial experimentation testing of your webhook configuration. For more information on how to test your webhooks, see the [Shopify CLI documentation](https://shopify.dev/docs/apps/tools/cli/commands#webhook-trigger).
-
-### Incorrect GraphQL Hints
-
-By default the [graphql.vscode-graphql](https://marketplace.visualstudio.com/items?itemName=GraphQL.vscode-graphql) extension for will assume that GraphQL queries or mutations are for the [Shopify Admin API](https://shopify.dev/docs/api/admin). This is a sensible default, but it may not be true if:
-
-1. You use another Shopify API such as the storefront API.
-2. You use a third party GraphQL API.
-
-If so, please update [.graphqlrc.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/.graphqlrc.ts).
-
-### Using Defer & await for streaming responses
-
-By default the CLI uses a cloudflare tunnel. Unfortunately cloudflare tunnels wait for the Response stream to finish, then sends one chunk. This will not affect production.
-
-To test [streaming using await](https://reactrouter.com/api/components/Await#await) during local development we recommend [localhost based development](https://shopify.dev/docs/apps/build/cli-for-apps/networking-options#localhost-based-development).
-
-### "nbf" claim timestamp check failed
-
-This is because a JWT token is expired. If you are consistently getting this error, it could be that the clock on your machine is not in sync with the server. To fix this ensure you have enabled "Set time and date automatically" in the "Date and Time" settings on your computer.
-
-### Using MongoDB and Prisma
-
-If you choose to use MongoDB with Prisma, there are some gotchas in Prisma's MongoDB support to be aware of. Please see the [Prisma SessionStorage README](https://www.npmjs.com/package/@shopify/shopify-app-session-storage-prisma#mongodb).
-
-### Unable to require(`C:\...\query_engine-windows.dll.node`).
-
-Unable to require(`C:\...\query_engine-windows.dll.node`).
-The Prisma engines do not seem to be compatible with your system.
-
-query_engine-windows.dll.node is not a valid Win32 application.
-
-**Fix:** Set the environment variable:
-
-```shell
-PRISMA_CLIENT_ENGINE_TYPE=binary
-```
-
-This forces Prisma to use the binary engine mode, which runs the query engine as a separate process and can work via emulation on Windows ARM64.
-
-## Resources
-
-React Router:
-
-- [React Router docs](https://reactrouter.com/home)
-
-Shopify:
-
-- [Intro to Shopify apps](https://shopify.dev/docs/apps/getting-started)
-- [Shopify App React Router docs](https://shopify.dev/docs/api/shopify-app-react-router)
-- [Shopify CLI](https://shopify.dev/docs/apps/tools/cli)
-- [Shopify App Bridge](https://shopify.dev/docs/api/app-bridge-library).
-- [Polaris Web Components](https://shopify.dev/docs/api/app-home/polaris-web-components).
-- [App extensions](https://shopify.dev/docs/apps/app-extensions/list)
-- [Shopify Functions](https://shopify.dev/docs/api/functions)
-
-Internationalization:
-
-- [Internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+### Environment variables
+
+| Var | Required | Notes |
+|---|---|---|
+| `SHOPIFY_API_KEY` | yes | from `shopify.app.toml` / Partner Dashboard |
+| `SHOPIFY_API_SECRET` | yes | same |
+| `SCOPES` | yes | comma-separated, set in `shopify.app.toml` |
+| `SHOPIFY_APP_URL` | yes | your app's public URL |
+| `DATABASE_URL` | yes | MongoDB connection string |
+| `GEMINI_API_KEY` | yes | powers try-on generation, category classification, size/fit, and video (Veo) |
+| `RESEND_API_KEY` | yes | usage-limit and trial emails |
+| `NODE_ENV=production` | yes, in prod | required by the deployment docs below |
+| `VEO_MODEL` | no | defaults to `veo-3.1-fast-generate-preview` |
+
+Shopify-specific vars are injected automatically by `shopify app dev`
+locally; set them by hand for a production deploy.
+
+### Per-product setup (merchant side)
+
+- **Apparel**: upload front/back/side reference images via the `tryon`
+  metafield namespace (`front_image`, `back_image`, `side_image`).
+- **Footwear / bags / jewelry**: no per-angle upload needed — the
+  product's featured image is used as the reference.
+- **Size chart** (optional, any category): set a `tryon.size_chart`
+  metafield as JSON, e.g. `[{"size":"S","chest_in":36}, ...]`, to get
+  merchant-specific size labels instead of a generic size band.
+- **Full outfit companions** (optional): pick "complete the look" products
+  per product page from the app embed block's settings in the theme
+  editor.
+
+## Known v1 simplifications
+
+- Full outfit relies on merchants manually picking companion products per
+  page rather than auto-suggesting them.
+- The spin viewer generates extra angles on demand as the customer drags,
+  rather than pre-generating the full set.
+- Category classification falls back to `outfit` if both the keyword match
+  and the AI vision fallback are inconclusive — worth spot-checking
+  accuracy against a real catalog.
+- Video generation polls inline within the request (up to ~90s) rather
+  than using a submit-now/poll-separately pattern; fine for launch, worth
+  revisiting under real traffic.
+- Video output is returned as a data URL rather than uploaded to blob
+  storage — works, but doesn't scale as well as it does for images.
+
+## Privacy note
+
+`Generation` rows store the **output** image/video only — never the
+customer's uploaded source photo. The widget should carry a short
+disclosure on first upload (e.g. "your photo is used to generate this
+preview and isn't stored — only the result is saved to your try-on
+history"); a few jurisdictions treat face/body photos as sensitive
+biometric data, and this storage design plus a clear disclosure covers the
+common cases.
+
+## Credits
+
+Forked from the [Shopify App Template — React
+Router](https://github.com/Shopify/shopify-app-template-react-router).
+See `CHANGELOG.md` for template-level upstream changes.
