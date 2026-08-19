@@ -6,7 +6,10 @@ import {
   recordGeneration,
   UsageLimitError,
 } from "../services/usage.server";
-import { requireFeature, FeatureNotAvailableError } from "../services/plan.server";
+import {
+  requireFeature,
+  FeatureNotAvailableError,
+} from "../services/plan.server";
 import { classifyProduct } from "../services/category.server";
 import {
   buildTryOnPrompt,
@@ -14,10 +17,12 @@ import {
   getCategoryConfig,
 } from "../services/tryon-prompts.server";
 import { saveGeneration } from "../services/generation.server";
-
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/interactions";
-const GEMINI_MODEL = "gemini-3.1-flash-image";
+import {
+  GEMINI_IMAGE_MODEL,
+  callGeminiInteraction,
+  extractInteractionImageBase64,
+  GeminiRequestError,
+} from "../services/gemini.server";
 
 const ANGLE_METAFIELD_KEY = {
   front: "front_image",
@@ -39,27 +44,6 @@ async function remoteImageToInline(url) {
     ";",
   )[0];
   return { mimeType: contentType, base64: buffer.toString("base64") };
-}
-
-function findOutputImage(json) {
-  if (json?.output_image?.data) return json.output_image.data;
-
-  const stack = [json];
-  while (stack.length) {
-    const current = stack.pop();
-    if (!current || typeof current !== "object") continue;
-    if (
-      current.type === "image" &&
-      typeof current.data === "string" &&
-      current.data.length > 100
-    ) {
-      return current.data;
-    }
-    for (const value of Object.values(current)) {
-      if (value && typeof value === "object") stack.push(value);
-    }
-  }
-  return "";
 }
 
 // Fetches the product's title/type/tags (for category classification) plus a
@@ -145,7 +129,8 @@ export async function action({ request }) {
 
   if (!shop) return json({ error: "MISSING_SHOP" }, { status: 400 });
   if (!productId) return json({ error: "MISSING_PRODUCT" }, { status: 400 });
-  if (!anonymousId) return json({ error: "MISSING_ANONYMOUS_ID" }, { status: 400 });
+  if (!anonymousId)
+    return json({ error: "MISSING_ANONYMOUS_ID" }, { status: 400 });
   if (!imageDataUrl && !sampleImageUrl) {
     return json(
       { error: "MISSING_IMAGE", message: "Upload a clear photo." },
@@ -154,7 +139,10 @@ export async function action({ request }) {
   }
   if (!process.env.GEMINI_API_KEY) {
     return json(
-      { error: "MISSING_GEMINI_API_KEY", message: "GEMINI_API_KEY is not set on the server." },
+      {
+        error: "MISSING_GEMINI_API_KEY",
+        message: "GEMINI_API_KEY is not set on the server.",
+      },
       { status: 500 },
     );
   }
@@ -166,9 +154,15 @@ export async function action({ request }) {
     await checkAndReserveGeneration(shop);
   } catch (err) {
     if (err instanceof UsageLimitError) {
-      return json({ error: "LIMIT_REACHED", message: err.message }, { status: 402 });
+      return json(
+        { error: "LIMIT_REACHED", message: err.message },
+        { status: 402 },
+      );
     }
-    return json({ error: "USAGE_CHECK_FAILED", message: err.message }, { status: 500 });
+    return json(
+      { error: "USAGE_CHECK_FAILED", message: err.message },
+      { status: 500 },
+    );
   }
 
   const isFullOutfit = companionProductIds.length > 0;
@@ -177,13 +171,21 @@ export async function action({ request }) {
       await requireFeature(store, "full_outfit");
     } catch (err) {
       if (err instanceof FeatureNotAvailableError) {
-        return json({ error: "UPGRADE_REQUIRED", feature: err.feature, message: err.message }, { status: 403 });
+        return json(
+          {
+            error: "UPGRADE_REQUIRED",
+            feature: err.feature,
+            message: err.message,
+          },
+          { status: 403 },
+        );
       }
       throw err;
     }
   }
 
-  const gid = (id) => (id.startsWith("gid://") ? id : `gid://shopify/Product/${id}`);
+  const gid = (id) =>
+    id.startsWith("gid://") ? id : `gid://shopify/Product/${id}`;
   const mainGid = gid(productId);
 
   const { admin } = await unauthenticated.admin(shop);
@@ -192,7 +194,12 @@ export async function action({ request }) {
     // Classify the main product's category first — every downstream step
     // (which reference image to use, which prompt, whether the angle needs
     // a paid feature) depends on it.
-    const previewProduct = await fetchProductForTryOn(admin, mainGid, "outfit", ANGLE_METAFIELD_KEY.front);
+    const previewProduct = await fetchProductForTryOn(
+      admin,
+      mainGid,
+      "outfit",
+      ANGLE_METAFIELD_KEY.front,
+    );
     const profile = await classifyProduct(store, {
       productGid: mainGid,
       productType: previewProduct.productType,
@@ -210,7 +217,14 @@ export async function action({ request }) {
         await requireFeature(store, "multi_angle_spin");
       } catch (err) {
         if (err instanceof FeatureNotAvailableError) {
-          return json({ error: "UPGRADE_REQUIRED", feature: err.feature, message: err.message }, { status: 403 });
+          return json(
+            {
+              error: "UPGRADE_REQUIRED",
+              feature: err.feature,
+              message: err.message,
+            },
+            { status: 403 },
+          );
         }
         throw err;
       }
@@ -220,7 +234,12 @@ export async function action({ request }) {
     }
 
     const angleKey = ANGLE_METAFIELD_KEY[angle] || ANGLE_METAFIELD_KEY.front;
-    const { title, imageUrl: productImageUrl } = await fetchProductForTryOn(admin, mainGid, category, angleKey);
+    const { title, imageUrl: productImageUrl } = await fetchProductForTryOn(
+      admin,
+      mainGid,
+      category,
+      angleKey,
+    );
     if (!productImageUrl) {
       return json({ error: "NO_PRODUCT_IMAGE" }, { status: 422 });
     }
@@ -236,7 +255,12 @@ export async function action({ request }) {
       const companions = await Promise.all(
         companionProductIds.map(async (id) => {
           const companionGid = gid(id);
-          const companionPreview = await fetchProductForTryOn(admin, companionGid, "outfit", ANGLE_METAFIELD_KEY.front);
+          const companionPreview = await fetchProductForTryOn(
+            admin,
+            companionGid,
+            "outfit",
+            ANGLE_METAFIELD_KEY.front,
+          );
           const companionProfile = await classifyProduct(store, {
             productGid: companionGid,
             productType: companionPreview.productType,
@@ -244,8 +268,14 @@ export async function action({ request }) {
             title: companionPreview.title,
             imageUrl: companionPreview.imageUrl,
           });
-          const companionAngleKey = ANGLE_METAFIELD_KEY[angle] || ANGLE_METAFIELD_KEY.front;
-          const companionData = await fetchProductForTryOn(admin, companionGid, companionProfile.category, companionAngleKey);
+          const companionAngleKey =
+            ANGLE_METAFIELD_KEY[angle] || ANGLE_METAFIELD_KEY.front;
+          const companionData = await fetchProductForTryOn(
+            admin,
+            companionGid,
+            companionProfile.category,
+            companionAngleKey,
+          );
           return {
             title: companionData.title,
             category: companionProfile.category,
@@ -273,14 +303,10 @@ export async function action({ request }) {
       referenceImages = [personImage, productImage];
     }
 
-    const geminiRes = await fetch(GEMINI_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        model: GEMINI_MODEL,
+    let payload;
+    try {
+      payload = await callGeminiInteraction({
+        model: GEMINI_IMAGE_MODEL,
         input: [
           { type: "text", text: prompt },
           ...referenceImages.map((img) => ({
@@ -289,24 +315,22 @@ export async function action({ request }) {
             data: img.base64,
           })),
         ],
-        response_format: {
+        responseFormat: {
           type: "image",
           mime_type: "image/jpeg",
           aspect_ratio: "3:4",
           image_size: "512",
         },
-      }),
-    });
-
-    const payload = await geminiRes.json();
-    if (!geminiRes.ok) {
+      });
+    } catch (err) {
+      const status = err instanceof GeminiRequestError ? err.status : 502;
       return json(
-        { error: "GEMINI_REQUEST_FAILED", message: payload?.error?.message || "Gemini request failed." },
-        { status: geminiRes.status },
+        { error: "GEMINI_REQUEST_FAILED", message: err.message },
+        { status },
       );
     }
 
-    const imageBase64 = findOutputImage(payload);
+    const imageBase64 = extractInteractionImageBase64(payload);
     if (!imageBase64) {
       return json({ error: "NO_IMAGE_RETURNED" }, { status: 502 });
     }
@@ -331,7 +355,10 @@ export async function action({ request }) {
     return json({ angle, category, imageUrl: resultImageUrl });
   } catch (error) {
     return json(
-      { error: "GENERATION_FAILED", message: error.message || "Could not generate this try-on." },
+      {
+        error: "GENERATION_FAILED",
+        message: error.message || "Could not generate this try-on.",
+      },
       { status: 500 },
     );
   }

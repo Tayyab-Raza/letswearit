@@ -308,6 +308,23 @@
   margin: -4px 0 10px;
 }
 
+/* Size-fit result: distinct from the plain gray hint text above so a real
+   suggestion doesn't look identical to "we couldn't tell" caveat copy. */
+.tryon-sizefit-result--found {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tryon-fg, #1a1a1a);
+  background: var(--tryon-accent-soft, #f2f6ff);
+  border: 1px solid var(--tryon-accent, #3b5bfd);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: -4px 0 10px;
+}
+
+.tryon-sizefit-result--error {
+  color: #b42318;
+}
+
 /* --- Previous-generation banner (history) --- */
 .tryon-history-banner {
   display: flex;

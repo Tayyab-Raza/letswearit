@@ -4,6 +4,29 @@ const GEMINI_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/interactions";
 const GEMINI_TEXT_MODEL = "gemini-3.1-flash";
 
+// The Interactions API's raw REST response has no `output_text` field — that's
+// an SDK convenience property, not part of the wire format. The real shape is
+// a `steps` timeline; the model's answer lives in the last `model_output`
+// step's text content. (Falling back to JSON.stringify(payload) here, like
+// the old code did, silently "succeeds" at parsing the whole raw response as
+// if it were our expected {suggestedSize,...} shape — every field comes back
+// undefined and the caller can't tell a real answer from a parsing failure.)
+function extractInteractionText(payload) {
+  if (typeof payload?.output_text === "string" && payload.output_text) {
+    return payload.output_text;
+  }
+  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (step?.type !== "model_output") continue;
+    const textPart = (step.content || []).find(
+      (c) => c?.type === "text" && c.text,
+    );
+    if (textPart) return textPart.text;
+  }
+  return "";
+}
+
 function parseDataUrl(dataUrl) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error("Invalid image data URL.");
@@ -15,12 +38,19 @@ function parseDataUrl(dataUrl) {
 // When present we ask the model to map its estimate onto the merchant's own
 // labels. When absent we fall back to a generic band and say so plainly —
 // this is advisory, not a measurement, and the UI must present it that way.
-export async function estimateSizeFit({ personImage, category, sizeChartJson, productTitle }) {
+export async function estimateSizeFit({
+  personImage,
+  category,
+  sizeChartJson,
+  productTitle,
+}) {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set on the server.");
   }
 
-  const image = personImage.dataUrl ? parseDataUrl(personImage.dataUrl) : personImage;
+  const image = personImage.dataUrl
+    ? parseDataUrl(personImage.dataUrl)
+    : personImage;
 
   const chartInstruction = sizeChartJson
     ? `The merchant's size chart for "${productTitle}" is: ${sizeChartJson}. Map your estimate onto one of these exact size labels.`
@@ -63,7 +93,9 @@ Be conservative: this is directional only, never claim high confidence, and neve
   }
 
   const payload = await res.json();
-  const text = payload?.output_text || payload?.content?.[0]?.text || JSON.stringify(payload);
+  const text = extractInteractionText(payload);
+  if (!text)
+    throw new Error("Gemini returned no usable output for this size estimate.");
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("Could not parse size estimate.");
 
@@ -71,7 +103,9 @@ Be conservative: this is directional only, never claim high confidence, and neve
   return {
     suggestedSize: parsed.suggestedSize ?? null,
     confidence: parsed.confidence === "medium" ? "medium" : "low",
-    note: parsed.note || "This is a general estimate — check the product's size chart to confirm.",
+    note:
+      parsed.note ||
+      "This is a general estimate — check the product's size chart to confirm.",
     needsSizeChart: !!parsed.needsSizeChart,
   };
 }

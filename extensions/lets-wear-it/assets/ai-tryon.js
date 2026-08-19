@@ -16,7 +16,10 @@
     try {
       let id = window.localStorage.getItem(ANON_ID_KEY);
       if (!id) {
-        id = "anon_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        id =
+          "anon_" +
+          Math.random().toString(36).slice(2) +
+          Date.now().toString(36);
         window.localStorage.setItem(ANON_ID_KEY, id);
       }
       return id;
@@ -125,7 +128,9 @@
 
     async function loadFeatures() {
       try {
-        const res = await fetch(`${featuresEndpoint}?shop=${encodeURIComponent(shop)}`);
+        const res = await fetch(
+          `${featuresEndpoint}?shop=${encodeURIComponent(shop)}`,
+        );
         const data = await res.json();
         state.features = data.features || [];
       } catch {
@@ -170,10 +175,12 @@
       } else if (state.category && state.category.startsWith("jewelry")) {
         els.uploadTitle.textContent = "Use a close, well-lit photo";
       } else {
-        els.uploadTitle.textContent = "Use a clear half-length or full-length photo";
+        els.uploadTitle.textContent =
+          "Use a clear half-length or full-length photo";
       }
 
-      const showOutfitPicker = companions.length > 0 && state.category === "outfit";
+      const showOutfitPicker =
+        companions.length > 0 && state.category === "outfit";
       els.outfitPicker.hidden = !showOutfitPicker;
       if (showOutfitPicker) {
         els.outfitLock.hidden = hasFeature("full_outfit");
@@ -223,14 +230,16 @@
           anonymousId,
           scope: "product",
         });
-        if (shopifyCustomerId) params.set("shopifyCustomerId", shopifyCustomerId);
+        if (shopifyCustomerId)
+          params.set("shopifyCustomerId", shopifyCustomerId);
         const res = await fetch(`${historyEndpoint}?${params.toString()}`);
         const data = await res.json();
         const latest = (data.generations || [])[0];
         if (latest) {
           els.historyBanner.hidden = false;
           els.historyBannerImg.src = latest.imageUrl;
-          els.historyBannerText.textContent = "You tried this on before — tap to view";
+          els.historyBannerText.textContent =
+            "You tried this on before — tap to view";
           els.historyBanner.onclick = () => {
             state.resultImages = { [latest.angle]: latest.imageUrl };
             state.angleStatus = { [latest.angle]: "ready" };
@@ -376,16 +385,25 @@
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Could not estimate size.");
+        if (!res.ok)
+          throw new Error(data.message || "Could not estimate size.");
         els.sizefitResult.hidden = false;
+        els.sizefitResult.classList.remove(
+          "tryon-sizefit-result--found",
+          "tryon-sizefit-result--error",
+        );
         if (data.needsSizeChart || !data.suggestedSize) {
-          els.sizefitResult.textContent = data.note || "Check the product's size chart for this item.";
+          els.sizefitResult.textContent =
+            data.note || "Check the product's size chart for this item.";
         } else {
+          els.sizefitResult.classList.add("tryon-sizefit-result--found");
           els.sizefitResult.textContent = `Likely fits: ${data.suggestedSize} (${data.confidence} confidence). ${data.note}`;
         }
       } catch (err) {
         els.sizefitResult.hidden = false;
-        els.sizefitResult.textContent = err.message || "Could not estimate size right now.";
+        els.sizefitResult.classList.add("tryon-sizefit-result--error");
+        els.sizefitResult.textContent =
+          err.message || "Could not estimate size right now.";
       } finally {
         els.sizefitBtn.disabled = false;
         els.sizefitBtn.textContent = "Get a size suggestion";
@@ -447,7 +465,13 @@
     }
 
     function defaultAngleSet() {
-      return (state.categoryConfig && state.categoryConfig.defaultAngles) || ["front", "side", "back"];
+      return (
+        (state.categoryConfig && state.categoryConfig.defaultAngles) || [
+          "front",
+          "side",
+          "back",
+        ]
+      );
     }
 
     async function generateTryOn() {
@@ -462,7 +486,9 @@
       state.activeAngle = angles[0];
       state.resultImages = {};
       state.angleStatus = {};
-      angles.forEach((a, i) => (state.angleStatus[a] = i === 0 ? "loading" : "queued"));
+      angles.forEach(
+        (a, i) => (state.angleStatus[a] = i === 0 ? "loading" : "queued"),
+      );
       render();
 
       try {
@@ -479,7 +505,10 @@
         state.step = "result";
         state.resultImages = {};
         angles.forEach((a) => (state.angleStatus[a] = "failed"));
-        showResultError(err.message || "We could not generate this try-on. Please try another photo.");
+        showResultError(
+          err.message ||
+            "We could not generate this try-on. Please try another photo.",
+        );
         render();
       }
     }
@@ -513,7 +542,9 @@
     async function handleShare() {
       const resultImage = state.resultImages[state.activeAngle];
       if (!resultImage) return;
-      const url = resultImage.startsWith("http") ? resultImage : window.location.href;
+      const url = resultImage.startsWith("http")
+        ? resultImage
+        : window.location.href;
       if (navigator.share) {
         await navigator.share({
           title: "My AI Try On",
@@ -578,11 +609,16 @@
     let dragStartX = null;
 
     function fullAngleList() {
-      return (state.categoryConfig && state.categoryConfig.angles) || defaultAngleSet();
+      return (
+        (state.categoryConfig && state.categoryConfig.angles) ||
+        defaultAngleSet()
+      );
     }
 
     function initSpinViewer() {
-      const canSpin = hasFeature("multi_angle_spin") && fullAngleList().length > defaultAngleSet().length;
+      const canSpin =
+        hasFeature("multi_angle_spin") &&
+        fullAngleList().length > defaultAngleSet().length;
       els.spinHint.hidden = !canSpin;
       if (!canSpin) return;
 
@@ -601,12 +637,18 @@
     function stepSpin(direction) {
       const angles = fullAngleList();
       const currentIndex = angles.indexOf(state.activeAngle);
-      const nextIndex = Math.min(angles.length - 1, Math.max(0, currentIndex + direction));
+      const nextIndex = Math.min(
+        angles.length - 1,
+        Math.max(0, currentIndex + direction),
+      );
       const nextAngle = angles[nextIndex];
       if (nextAngle === state.activeAngle) return;
 
       state.activeAngle = nextAngle;
-      if (!state.resultImages[nextAngle] && state.angleStatus[nextAngle] !== "loading") {
+      if (
+        !state.resultImages[nextAngle] &&
+        state.angleStatus[nextAngle] !== "loading"
+      ) {
         generateBackgroundAngle(nextAngle);
       }
       renderResultImage();
@@ -640,12 +682,15 @@
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Could not generate the video.");
+        if (!res.ok)
+          throw new Error(data.message || "Could not generate the video.");
         els.videoEl.src = data.videoUrl;
         els.videoWrap.hidden = false;
         els.videoBtn.hidden = true;
       } catch (err) {
-        showResultError(err.message || "Could not generate the video right now.");
+        showResultError(
+          err.message || "Could not generate the video right now.",
+        );
       } finally {
         els.videoBtn.disabled = false;
         els.videoBtn.textContent = "▶ Generate a short turn video";
@@ -662,8 +707,13 @@
       els.closetCompareBtn.hidden = true;
 
       try {
-        const params = new URLSearchParams({ shop, anonymousId, scope: "closet" });
-        if (shopifyCustomerId) params.set("shopifyCustomerId", shopifyCustomerId);
+        const params = new URLSearchParams({
+          shop,
+          anonymousId,
+          scope: "closet",
+        });
+        if (shopifyCustomerId)
+          params.set("shopifyCustomerId", shopifyCustomerId);
         const res = await fetch(`${historyEndpoint}?${params.toString()}`);
         const data = await res.json();
         renderCloset(data.generations || []);
@@ -708,7 +758,9 @@
       } else {
         if (state.closetSelection.length >= 2) {
           const removedId = state.closetSelection.shift().id;
-          const removedEl = els.closetGrid.querySelector(`[data-id="${removedId}"]`);
+          const removedEl = els.closetGrid.querySelector(
+            `[data-id="${removedId}"]`,
+          );
           if (removedEl) removedEl.classList.remove("selected");
         }
         state.closetSelection.push(gen);
@@ -733,7 +785,8 @@
 
     function updatePrimaryState() {
       els.primary.disabled =
-        state.step === "processing" || (state.step === "upload" && !state.uploadData);
+        state.step === "processing" ||
+        (state.step === "upload" && !state.uploadData);
       const labels = {
         intro: "Start Try On",
         upload: state.uploadData ? "Generate Look" : "Upload Photo",
