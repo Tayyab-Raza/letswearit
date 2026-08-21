@@ -301,6 +301,11 @@
 }
 
 .tryon-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tryon-primary--out-of-stock {
+  background: var(--tryon-muted);
+  opacity: 1;
+}
 /* --- Category-aware photo guidance --- */
 .tryon-photo-hint {
   font-size: 11px;
@@ -442,6 +447,7 @@
 }
 
 .tryon-video-wrap {
+  position: relative;
   margin-top: 10px;
   border-radius: 14px;
   overflow: hidden;
@@ -449,6 +455,28 @@
 }
 
 .tryon-video-wrap video { width: 100%; display: block; }
+
+.tryon-download {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tryon-download[hidden] {
+  display: none;
+}
 
 /* --- Closet / compare drawer --- */
 .tryon-closet-btn {

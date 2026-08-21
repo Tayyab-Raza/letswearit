@@ -28,6 +28,9 @@
     data-tryon-features-endpoint="/apps/lets-wear-it/tryon/features"
     data-tryon-category-endpoint="/apps/lets-wear-it/tryon/category"
     data-sample-photo-url="{{ block.settings.sample_photo_url | default: 'https://storage.googleapis.com/falserverless/example_inputs/model.png' }}"
+    data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+    data-available="{{ product.selected_or_first_available_variant.available }}"
+    data-product-handle="{{ product.handle }}"
     {%- if customer %}
     data-shopify-customer-id="{{ customer.id }}"
     {%- endif %}
@@ -117,6 +120,13 @@
             </div>
             <div class="tryon-angle-tabs" data-tryon-angle-tabs></div>
             <div class="tryon-result-image" data-tryon-result-image>
+              <button type="button" class="tryon-download" data-tryon-download hidden aria-label="Download this image">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 3v12" />
+                  <path d="M7 10l5 5 5-5" />
+                  <path d="M4 19h16" />
+                </svg>
+              </button>
               <div class="tryon-angle-loading" data-tryon-angle-loading>
                 <div class="tryon-mini-spinner"></div>
                 <strong data-tryon-angle-loading-label>Front view is generating</strong>
@@ -173,6 +183,13 @@
           <div class="tryon-outfit-chips" data-tryon-outfit-chips></div>
           <button type="button" class="tryon-primary" data-tryon-outfit-generate>Generate outfit look</button>
           <div class="tryon-result-image" data-tryon-outfit-result-image hidden>
+            <button type="button" class="tryon-download" data-tryon-outfit-download hidden aria-label="Download this image">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3v12" />
+                <path d="M7 10l5 5 5-5" />
+                <path d="M4 19h16" />
+              </svg>
+            </button>
             <img data-tryon-outfit-result-img hidden alt="Full outfit result" width="400" height="400" />
           </div>
         </div>
@@ -191,6 +208,13 @@
           <div data-tryon-video-content hidden>
             <button type="button" class="tryon-video-btn" data-tryon-video-btn>▶ Generate a short turn video</button>
             <div class="tryon-video-wrap" data-tryon-video-wrap hidden>
+              <button type="button" class="tryon-download" data-tryon-video-download hidden aria-label="Download this video">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 3v12" />
+                  <path d="M7 10l5 5 5-5" />
+                  <path d="M4 19h16" />
+                </svg>
+              </button>
               <video data-tryon-video-el controls playsinline></video>
             </div>
           </div>

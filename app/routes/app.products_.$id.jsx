@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { CATEGORIES } from "../services/category.server";
+
+// Media types the native file picker should offer — reference photos are always images.
+const PICKER_DATA = { mediaTypes: ["MediaImage"] };
 
 const METAFIELD_NAMESPACE = "tryon";
 
@@ -235,14 +238,23 @@ async function uploadImageFile(admin, file) {
 
 async function handleImagesIntent(admin, productGid, formData) {
   const uploads = [];
+  const picked = [];
   for (const field of IMAGE_FIELDS) {
     const file = formData.get(field.formField);
     if (file && typeof file === "object" && "size" in file && file.size > 0) {
       uploads.push({ field, file });
+      continue;
+    }
+    // Imported via the native "Import from Shopify" file picker — already
+    // a real File/MediaImage on this store, so it just needs writing to
+    // the metafield directly, no staged upload required.
+    const pickedFileId = formData.get(`${field.formField}_file_id`);
+    if (pickedFileId) {
+      picked.push({ field, fileGid: String(pickedFileId) });
     }
   }
 
-  if (uploads.length === 0) {
+  if (uploads.length === 0 && picked.length === 0) {
     return { error: "Choose at least one image before saving." };
   }
 
@@ -251,6 +263,15 @@ async function handleImagesIntent(admin, productGid, formData) {
   const metafieldsInput = [];
   for (const { field, file } of uploads) {
     const fileGid = await uploadImageFile(admin, file);
+    metafieldsInput.push({
+      ownerId: productGid,
+      namespace: METAFIELD_NAMESPACE,
+      key: field.key,
+      type: "file_reference",
+      value: fileGid,
+    });
+  }
+  for (const { field, fileGid } of picked) {
     metafieldsInput.push({
       ownerId: productGid,
       namespace: METAFIELD_NAMESPACE,
@@ -279,7 +300,7 @@ async function handleImagesIntent(admin, productGid, formData) {
 
   return {
     imagesSuccess: true,
-    savedFields: uploads.map((u) => u.field.formField),
+    savedFields: [...uploads, ...picked].map((u) => u.field.formField),
   };
 }
 
@@ -389,6 +410,7 @@ export default function ProductDetail() {
   } = useLoaderData();
 
   const imagesFetcher = useFetcher();
+  const previewFetcher = useFetcher();
   const sizeChartFetcher = useFetcher();
   const categoryFetcher = useFetcher();
 
@@ -397,6 +419,20 @@ export default function ProductDetail() {
     back: null,
     side: null,
   });
+
+  // Files picked via Shopify's native file picker, keyed by field:
+  // { id: "gid://shopify/MediaImage/...", url: "..." }
+  const [pickedFiles, setPickedFiles] = useState({
+    front: null,
+    back: null,
+    side: null,
+  });
+  const [importingField, setImportingField] = useState(null);
+  const pendingPreviewField = useRef(null);
+
+  // The image currently shown in the "view full size" modal.
+  const [viewingImage, setViewingImage] = useState(null);
+
   useEffect(() => {
     return () => {
       Object.values(previews).forEach((url) => url && URL.revokeObjectURL(url));
@@ -410,7 +446,58 @@ export default function ProductDetail() {
       ...current,
       [fieldKey]: URL.createObjectURL(file),
     }));
+    // A manual upload replaces any previously-imported file for this slot.
+    setPickedFiles((current) => ({ ...current, [fieldKey]: null }));
   }
+
+  async function handleImport(fieldKey) {
+    if (typeof window === "undefined" || !window.shopify?.intents) return;
+    setImportingField(fieldKey);
+    try {
+      const activity = await window.shopify.intents.invoke(
+        "pick:shopify/File",
+        {
+          data: PICKER_DATA,
+        },
+      );
+      const response = await activity.complete;
+      if (response.code !== "ok") return;
+
+      const fileId = response.data?.ids?.[0];
+      if (!fileId) return;
+
+      setPreviews((current) => {
+        if (current[fieldKey]) URL.revokeObjectURL(current[fieldKey]);
+        return { ...current, [fieldKey]: null };
+      });
+      setPickedFiles((current) => ({
+        ...current,
+        [fieldKey]: { id: fileId, url: null },
+      }));
+
+      pendingPreviewField.current = fieldKey;
+      previewFetcher.load(
+        `/app/api/file-preview?ids=${encodeURIComponent(fileId)}`,
+      );
+    } finally {
+      setImportingField(null);
+    }
+  }
+
+  // Route the resolved preview URL back to whichever field triggered it.
+  useEffect(() => {
+    if (previewFetcher.state !== "idle" || !previewFetcher.data) return;
+    const fieldKey = pendingPreviewField.current;
+    if (!fieldKey) return;
+    const images = previewFetcher.data.images || {};
+    setPickedFiles((current) => {
+      const entry = current[fieldKey];
+      if (!entry) return current;
+      const url = images[entry.id];
+      if (!url || entry.url === url) return current;
+      return { ...current, [fieldKey]: { ...entry, url } };
+    });
+  }, [previewFetcher.state, previewFetcher.data]);
 
   const isSavingImages = imagesFetcher.state !== "idle";
   const imagesResult = imagesFetcher.data;
@@ -499,30 +586,135 @@ export default function ProductDetail() {
 
       <imagesFetcher.Form method="post" encType="multipart/form-data">
         <input type="hidden" name="intent" value="images" />
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="mt-8 space-y-4">
           {IMAGE_FIELDS.map(({ formField, label }) => {
-            const previewUrl = previews[formField] || existingImages[formField];
+            const picked = pickedFiles[formField];
+            const previewUrl =
+              previews[formField] || picked?.url || existingImages[formField];
             return (
-              <div key={formField}>
-                <p className="mb-2 text-sm font-medium text-neutral-700">
-                  {label}
-                </p>
-                <div className="h-40 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100">
-                  {previewUrl && (
+              <div
+                key={formField}
+                className="flex items-start gap-4 rounded-xl border border-neutral-200 p-4"
+              >
+                <div className="relative h-[72px] w-[72px] flex-shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
+                  {previewUrl ? (
                     <img
                       src={previewUrl}
                       alt={`${label} preview`}
                       className="h-full w-full object-cover"
                     />
+                  ) : picked ? (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <svg
+                        className="h-4 w-4 animate-spin text-neutral-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          opacity="0.25"
+                        />
+                        <path
+                          d="M21 12a9 9 0 0 0-9-9"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </div>
+                  ) : null}
+                  {previewUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewingImage({ url: previewUrl, label })
+                      }
+                      aria-label={`View ${label} full size`}
+                      className="absolute right-1 top-1 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-black/55 text-white"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
                   )}
                 </div>
-                <input
-                  type="file"
-                  name={formField}
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) => handleFileChange(formField, event)}
-                  className="mt-2 block w-full text-xs text-neutral-500 file:mr-3 file:rounded-full file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-neutral-800"
-                />
+
+                <div className="flex-1">
+                  <p className="mb-2 text-sm font-medium text-neutral-700">
+                    {label}
+                  </p>
+                  <div className="flex flex-wrap items-stretch gap-3">
+                    <label
+                      htmlFor={`${formField}-file-input`}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-neutral-300 px-3.5 py-2.5 text-xs text-neutral-600 hover:border-neutral-500"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M12 3v12" />
+                        <path d="M7 8l5-5 5 5" />
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                      </svg>
+                      Choose file
+                      <input
+                        id={`${formField}-file-input`}
+                        type="file"
+                        name={formField}
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(event) => handleFileChange(formField, event)}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {picked && (
+                      <input
+                        type="hidden"
+                        name={`${formField}_file_id`}
+                        value={picked.id}
+                      />
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleImport(formField)}
+                      disabled={importingField === formField}
+                      className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M21 15l-5-5L5 21" />
+                      </svg>
+                      {importingField === formField
+                        ? "Opening..."
+                        : "Import from Shopify"}
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -536,6 +728,35 @@ export default function ProductDetail() {
           {isSavingImages ? "Saving…" : "Save photos"}
         </button>
       </imagesFetcher.Form>
+
+      {viewingImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setViewingImage(null)}
+        >
+          <div
+            className="relative max-h-[85vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setViewingImage(null)}
+              aria-label="Close preview"
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-lg font-semibold text-white"
+            >
+              ×
+            </button>
+            <img
+              src={viewingImage.url}
+              alt={`${viewingImage.label} full size`}
+              className="max-h-[75vh] max-w-full rounded-lg object-contain"
+            />
+            <p className="mt-2 text-center text-sm text-neutral-600">
+              {viewingImage.label}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* --- Category --- */}
       <div className="mt-10 rounded-2xl border border-neutral-200 p-6">

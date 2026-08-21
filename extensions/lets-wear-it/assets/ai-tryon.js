@@ -60,6 +60,9 @@
     const samplePhotoUrl = root.dataset.samplePhotoUrl;
     const shopifyCustomerId = root.dataset.shopifyCustomerId || null;
     const anonymousId = getAnonymousId();
+    const variantId = root.dataset.variantId;
+    const initialAvailable = root.dataset.available === "true";
+    const productHandle = root.dataset.productHandle;
 
     let companions = [];
     try {
@@ -103,6 +106,7 @@
       angleLoadingLabel: root.querySelector("[data-tryon-angle-loading-label]"),
       shareBtn: root.querySelector("[data-tryon-share]"),
       addToCartBtn: root.querySelector("[data-tryon-add-to-cart]"),
+      resultDownloadBtn: root.querySelector("[data-tryon-download]"),
 
       // Size & Fit panel
       sizefitBtn: root.querySelector("[data-tryon-sizefit-btn]"),
@@ -121,6 +125,7 @@
       outfitGenerateBtn: root.querySelector("[data-tryon-outfit-generate]"),
       outfitResultImage: root.querySelector("[data-tryon-outfit-result-image]"),
       outfitResultImg: root.querySelector("[data-tryon-outfit-result-img]"),
+      outfitDownloadBtn: root.querySelector("[data-tryon-outfit-download]"),
 
       // Video panel
       videoEmpty: root.querySelector("[data-tryon-video-empty]"),
@@ -128,6 +133,7 @@
       videoBtn: root.querySelector("[data-tryon-video-btn]"),
       videoWrap: root.querySelector("[data-tryon-video-wrap]"),
       videoEl: root.querySelector("[data-tryon-video-el]"),
+      videoDownloadBtn: root.querySelector("[data-tryon-video-download]"),
 
       // Closet panel
       closetGrid: root.querySelector("[data-tryon-closet-grid]"),
@@ -152,10 +158,86 @@
       outfitStatus: "idle", // idle | loading | ready | failed
       outfitImage: null,
       closetSelection: [],
+      variantId: variantId || null,
+      available: variantId ? initialAvailable : false,
+      addingToCart: false,
     };
 
     function hasFeature(key) {
       return state.features.includes(key);
+    }
+
+    // Availability lookup for every variant, keyed by variant id. Loaded
+    // once in the background; used so we can tell whether whatever variant
+    // the shopper currently has selected is actually in stock.
+    let variantsById = null;
+    if (productHandle) {
+      fetch(`/products/${productHandle}.js`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data || !Array.isArray(data.variants)) return;
+          variantsById = {};
+          data.variants.forEach((v) => {
+            variantsById[String(v.id)] = v;
+          });
+          if (state.tryOnStep === "result") {
+            syncSelectedVariant();
+            renderAddToCartState();
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Reads the variant the shopper currently has selected directly from
+    // the page's own add-to-cart form — the same source of truth the theme
+    // itself uses — rather than relying on the value at page load.
+    function getSelectedVariantIdFromPage() {
+      const field = document.querySelector(
+        'form[action*="/cart/add"] [name="id"]',
+      );
+      return field && field.value ? String(field.value) : null;
+    }
+
+    // Refreshes state.variantId/state.available from whatever is currently
+    // selected on the page. Call this right before anything that depends
+    // on knowing the exact variant (opening the sheet, showing the Add to
+    // Cart button, actually adding to cart).
+    function syncSelectedVariant() {
+      const id = getSelectedVariantIdFromPage() || state.variantId;
+      if (!id) {
+        state.variantId = null;
+        state.available = false;
+        return;
+      }
+      state.variantId = id;
+      if (variantsById && variantsById[id]) {
+        state.available = !!variantsById[id].available;
+      } else if (id === variantId) {
+        // Haven't loaded the variants map yet (or it failed) — fall back
+        // to the value rendered at page load for the original variant.
+        state.available = initialAvailable;
+      } else {
+        // A different variant than the one rendered server-side, and we
+        // don't have fresh availability data for it yet — assume it's
+        // orderable; /cart/add.js is the final authority and will reject
+        // it with a clear error if it's actually out of stock.
+        state.available = true;
+      }
+    }
+
+    function renderAddToCartState() {
+      syncSelectedVariant();
+      const outOfStock = !state.available;
+      els.addToCartBtn.disabled = outOfStock || state.addingToCart;
+      els.addToCartBtn.classList.toggle(
+        "tryon-primary--out-of-stock",
+        outOfStock,
+      );
+      els.addToCartBtn.textContent = outOfStock
+        ? "Out of Stock"
+        : state.addingToCart
+          ? "Adding..."
+          : "Add to Cart";
     }
 
     root.querySelectorAll(".tryon-panel-lock p").forEach((p) => {
@@ -307,6 +389,7 @@
       els.overlay.hidden = false;
       els.sheet.classList.add("open");
       els.sheet.setAttribute("aria-hidden", "false");
+      lockBodyScroll();
       switchTab(state.activeTab);
 
       if (!setupLoaded) {
@@ -320,6 +403,25 @@
       els.overlay.hidden = true;
       els.sheet.classList.remove("open");
       els.sheet.setAttribute("aria-hidden", "true");
+      unlockBodyScroll();
+    }
+
+    let bodyScrollLockCount = 0;
+    let savedBodyOverflow = "";
+
+    function lockBodyScroll() {
+      if (bodyScrollLockCount === 0) {
+        savedBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+      }
+      bodyScrollLockCount += 1;
+    }
+
+    function unlockBodyScroll() {
+      bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+      if (bodyScrollLockCount === 0) {
+        document.body.style.overflow = savedBodyOverflow;
+      }
     }
 
     function showError(message) {
@@ -484,6 +586,14 @@
     els.generateBtn.addEventListener("click", generateTryOn);
     els.shareBtn.addEventListener("click", handleShare);
     els.addToCartBtn.addEventListener("click", handleAddToCart);
+    els.resultDownloadBtn.addEventListener("click", () => {
+      const imageUrl = state.resultImages[state.activeAngle];
+      if (!imageUrl) return;
+      downloadFile(
+        imageUrl,
+        `${slugify(productTitle)}-${state.activeAngle}.jpg`,
+      );
+    });
 
     async function generateAngle(angle, companionIds) {
       const response = await fetch(endpoint, {
@@ -589,6 +699,7 @@
       if (state.tryOnStep === "result") {
         renderAngleTabs();
         renderResultImage();
+        renderAddToCartState();
       }
     }
 
@@ -622,9 +733,11 @@
         els.resultImg.src = imageUrl;
         els.resultImg.hidden = false;
         els.angleLoading.hidden = true;
+        els.resultDownloadBtn.hidden = false;
       } else {
         els.resultImg.hidden = true;
         els.angleLoading.hidden = false;
+        els.resultDownloadBtn.hidden = true;
         els.angleLoadingLabel.textContent = `${ANGLE_LABELS[state.activeAngle] || state.activeAngle} view is generating`;
       }
     }
@@ -634,6 +747,45 @@
       renderAngleTabs();
       renderResultImage();
       if (state.activeTab === "spin") renderSpinPanel();
+    }
+
+    function slugify(text) {
+      return (text || "try-on")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+    }
+
+    async function downloadFile(url, filename) {
+      if (!url) return;
+      try {
+        if (url.startsWith("data:")) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
+        // Likely a remote (e.g. cloud-hosted) file — fetch it as a blob so
+        // the download attribute actually forces a save instead of just
+        // navigating to it.
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // CORS or network failure — fall back to opening it so the
+        // shopper can still save it manually.
+        window.open(url, "_blank");
+      }
     }
 
     function handleShare() {
@@ -656,14 +808,54 @@
       }
     }
 
-    function handleAddToCart() {
-      closeSheet();
-      window.setTimeout(() => {
-        const event = new CustomEvent("tryon:add-to-cart", {
-          detail: { productId, productTitle },
+    async function handleAddToCart() {
+      syncSelectedVariant();
+      if (!state.available || !state.variantId || state.addingToCart) return;
+
+      state.addingToCart = true;
+      showError("");
+      renderAddToCartState();
+
+      try {
+        const response = await fetch("/cart/add.js", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            items: [{ id: state.variantId, quantity: 1 }],
+          }),
         });
-        root.dispatchEvent(event);
-      }, 250);
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            (payload && payload.description) ||
+              "Could not add this item to your cart.",
+          );
+        }
+
+        // Let the theme's own cart drawer/count refresh itself if it's
+        // listening for this; if nothing is, the reload below still
+        // leaves the cart correctly updated.
+        root.dispatchEvent(
+          new CustomEvent("tryon:add-to-cart", {
+            bubbles: true,
+            detail: { productId, productTitle, variantId: state.variantId },
+          }),
+        );
+
+        closeSheet();
+        window.setTimeout(() => window.location.reload(), 200);
+      } catch (err) {
+        state.addingToCart = false;
+        renderAddToCartState();
+        showError(
+          err.message ||
+            "Could not add this item to your cart. Please try again.",
+        );
+      }
     }
 
     // --- Size & Fit panel ---
@@ -773,6 +965,10 @@
     // --- Full Outfit panel ---
 
     els.outfitGenerateBtn.addEventListener("click", generateOutfit);
+    els.outfitDownloadBtn.addEventListener("click", () => {
+      if (!state.outfitImage) return;
+      downloadFile(state.outfitImage, `${slugify(productTitle)}-outfit.jpg`);
+    });
 
     async function generateOutfit() {
       if (!requirePhoto()) return;
@@ -804,6 +1000,7 @@
           ? "Generating..."
           : "Generate outfit look";
       els.outfitResultImage.hidden = state.outfitStatus !== "ready";
+      els.outfitDownloadBtn.hidden = state.outfitStatus !== "ready";
       if (state.outfitStatus === "ready") {
         els.outfitResultImg.src = state.outfitImage;
         els.outfitResultImg.hidden = false;
@@ -828,6 +1025,10 @@
     }
 
     els.videoBtn.addEventListener("click", handleVideo);
+    els.videoDownloadBtn.addEventListener("click", () => {
+      if (!els.videoEl.src) return;
+      downloadFile(els.videoEl.src, `${slugify(productTitle)}-video.mp4`);
+    });
 
     async function handleVideo() {
       const stillImageDataUrl = sourceStillForVideo();
@@ -854,6 +1055,7 @@
           throw new Error(data.message || "Could not generate the video.");
         els.videoEl.src = data.videoUrl;
         els.videoWrap.hidden = false;
+        els.videoDownloadBtn.hidden = false;
         els.videoBtn.hidden = true;
       } catch (err) {
         showError(err.message || "Could not generate the video right now.");
