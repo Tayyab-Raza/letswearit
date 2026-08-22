@@ -1,4 +1,5 @@
 import { useLoaderData, useFetcher } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -86,7 +87,7 @@ export default function Billing() {
     window.top.location.href = fetcher.data.redirectUrl;
   }
 
-  const daysLeftInTrial = store.trialEndsAt
+  const daysLeftInTrial = store?.trialEndsAt
     ? Math.max(
         0,
         Math.ceil((new Date(store.trialEndsAt) - new Date()) / 86400000),
@@ -94,69 +95,78 @@ export default function Billing() {
     : 0;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-900">Billing</h1>
-
-      {store.subscriptionStatus === "trial" && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Free trial — {daysLeftInTrial} day{daysLeftInTrial === 1 ? "" : "s"}{" "}
-          left, {store.generationsUsed}/{store.generationLimit} try-ons used.
+    <main className="lwi-page">
+      <section className="lwi-hero">
+        <div>
+          <p className="lwi-kicker">Plans & usage</p>
+          <h1 className="lwi-title">Choose your level.</h1>
+          <p className="lwi-subtitle">
+            Start with the complete LetsWearIt experience, then choose the
+            generation volume and features that fit your store.
+          </p>
         </div>
-      )}
+        {store?.subscriptionStatus === "trial" && (
+          <span className="lwi-trial-pill"><i>✦</i> {daysLeftInTrial} day{daysLeftInTrial === 1 ? "" : "s"} left</span>
+        )}
+      </section>
 
       {fetcher.data?.error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
           {fetcher.data.error}
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
-        {plans.map((plan) => {
+      <div className="lwi-grid-3">
+        {plans.map((plan, index) => {
           const isCurrent = store.planKey === plan.key;
           return (
-            <div
+            <article
               key={plan.key}
-              className={`rounded-2xl border p-6 shadow-sm ${
-                isCurrent
-                  ? "border-neutral-900 ring-1 ring-neutral-900"
-                  : "border-neutral-200"
-              }`}
+              className={`lwi-card flex flex-col ${isCurrent ? "ring-2 ring-[#7650db]" : ""}`}
             >
-              <h2 className="text-lg font-semibold text-neutral-900">
-                {plan.name}
-              </h2>
-              <p className="mt-2 text-3xl font-bold text-neutral-900">
-                ${plan.monthlyPrice}
-                <span className="text-sm font-normal text-neutral-500">
-                  /mo
+              {index === 1 && (
+                <span className="mb-3 w-fit rounded-full bg-[#f3efff] px-2 py-1 text-[8px] font-extrabold uppercase tracking-[.12em] text-[#7146cb]">
+                  Most popular
                 </span>
+              )}
+              <h2 className="text-lg font-bold tracking-tight text-neutral-900">{plan.name}</h2>
+              <p className="mt-2 text-3xl font-extrabold tracking-tight text-neutral-900">
+                ${plan.monthlyPrice}
+                <span className="text-xs font-medium text-neutral-400"> / month</span>
               </p>
-              <p className="mt-2 text-sm text-neutral-500">
-                {plan.generationLimit} try-on generations / month
+              <p className="mt-2 text-xs text-neutral-500">
+                {plan.generationLimit} AI generations each billing period
               </p>
-              <ul className="mt-4 space-y-1.5 text-sm text-neutral-600">
+
+              <div className="my-5 h-px bg-neutral-100" />
+              <ul className="flex-1 space-y-2">
                 {(plan.features || []).map((key) => (
-                  <li key={key} className="flex items-start gap-1.5">
-                    <span className="text-green-600">✓</span>
+                  <li key={key} className="flex gap-2 text-[10px] leading-4 text-neutral-600">
+                    <span className="font-bold text-[#7850d8]">✓</span>
                     {FEATURE_LABELS[key] || key}
                   </li>
                 ))}
               </ul>
+
               <button
                 onClick={() => handleSelect(plan.key)}
                 disabled={isCurrent || fetcher.state !== "idle"}
-                className={`mt-6 w-full rounded-full px-4 py-2.5 text-sm font-semibold transition ${
+                className={`mt-6 w-full rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${
                   isCurrent
-                    ? "cursor-default bg-neutral-100 text-neutral-400"
-                    : "bg-neutral-900 text-white hover:bg-neutral-800"
+                    ? "cursor-default border border-neutral-200 bg-neutral-50 text-neutral-400"
+                    : "bg-[#0d1423] text-white hover:bg-[#18233a]"
                 }`}
               >
-                {isCurrent ? "Current plan" : "Choose plan"}
+                {isCurrent ? "Current plan" : fetcher.state !== "idle" ? "Opening checkout…" : "Choose plan →"}
               </button>
-            </div>
+            </article>
           );
         })}
       </div>
-    </div>
+    </main>
   );
 }
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

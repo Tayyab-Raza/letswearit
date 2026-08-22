@@ -1,6 +1,10 @@
 export default function AdditionalPage() {
   return (
-    <s-page heading="Additional page">
+    <div className="lwi-page lwi-page--narrow">
+      <p className="lwi-kicker">Workspace</p>
+      <h1 className="lwi-title">Additional tools.</h1>
+      <p className="lwi-subtitle">Reference resources for building and extending your LetsWearIt experience.</p>
+      <div className="lwi-card mt-6">
       <s-section heading="Multiple pages">
         <s-paragraph>
           The app template comes with an additional page which demonstrates how
@@ -32,6 +36,7 @@ export default function AdditionalPage() {
           </s-list-item>
         </s-unordered-list>
       </s-section>
-    </s-page>
+      </div>
+    </div>
   );
 }

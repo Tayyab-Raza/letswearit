@@ -553,7 +553,7 @@ export default function ProductDetail() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <main className="lwi-page lwi-page--narrow">
       <Link
         to="/app/products"
         className="text-sm text-neutral-500 hover:underline"
@@ -561,9 +561,10 @@ export default function ProductDetail() {
         ← Back to products
       </Link>
 
-      <h1 className="mt-3 text-2xl font-semibold text-neutral-900">
-        {product.title}
-      </h1>
+      <div className="mt-5">
+        <p className="lwi-kicker">Product setup</p>
+        <h1 className="lwi-title">{product.title}</h1>
+      </div>
 
       {/* --- Reference photos --- */}
       <p className="mt-2 max-w-xl text-sm text-neutral-500">
@@ -907,6 +908,6 @@ export default function ProductDetail() {
           </button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

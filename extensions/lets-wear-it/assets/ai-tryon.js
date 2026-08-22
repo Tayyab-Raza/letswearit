@@ -95,18 +95,21 @@
       fileInput: root.querySelector("[data-tryon-file-input]"),
       sampleBtn: root.querySelector("[data-tryon-sample]"),
 
-      // Try On panel
+      // Try On + dedicated result screen
       tryOnIdle: root.querySelector('[data-tryon-step="idle"]'),
       tryOnProcessing: root.querySelector('[data-tryon-step="processing"]'),
-      tryOnResult: root.querySelector('[data-tryon-step="result"]'),
       generateBtn: root.querySelector("[data-tryon-generate]"),
-      angleTabs: root.querySelector("[data-tryon-angle-tabs]"),
+      resultScreen: root.querySelector("[data-tryon-result-screen]"),
+      mainContent: root.querySelector("[data-tryon-main-content]"),
+      resultBack: root.querySelector("[data-tryon-result-back]"),
+      angleTabs: root.querySelector("[data-tryon-result-angle-tabs]"),
       resultImg: root.querySelector("[data-tryon-result-img]"),
-      angleLoading: root.querySelector("[data-tryon-angle-loading]"),
-      angleLoadingLabel: root.querySelector("[data-tryon-angle-loading-label]"),
+      angleLoading: root.querySelector("[data-tryon-result-loading]"),
+      angleLoadingLabel: root.querySelector("[data-tryon-result-loading-label]"),
+      resultAngleName: root.querySelector("[data-tryon-result-angle-name]"),
       shareBtn: root.querySelector("[data-tryon-share]"),
-      addToCartBtn: root.querySelector("[data-tryon-add-to-cart]"),
-      resultDownloadBtn: root.querySelector("[data-tryon-download]"),
+      addToCartBtn: root.querySelector("[data-tryon-result-add-to-cart]"),
+      resultDownloadBtn: root.querySelector("[data-tryon-result-download]"),
 
       // Size & Fit panel
       sizefitBtn: root.querySelector("[data-tryon-sizefit-btn]"),
@@ -161,6 +164,8 @@
       variantId: variantId || null,
       available: variantId ? initialAvailable : false,
       addingToCart: false,
+      featuresLoaded: false,
+      resultScreenOpen: false,
     };
 
     function hasFeature(key) {
@@ -263,9 +268,12 @@
         const data = await res.json();
         state.features = data.features || [];
         state.featuresError = false;
+        state.featuresLoaded = true;
       } catch {
         state.features = [];
         state.featuresError = true;
+        state.featuresLoaded = false;
+        showError("We couldn't verify plan features. You can still try the experience.");
       }
       renderTabs();
       renderLocks();
@@ -368,6 +376,8 @@
             state.activeAngle = latest.angle;
             state.tryOnStep = "result";
             switchTab("tryon");
+            state.resultScreenOpen = true;
+            renderTryOnPanel();
           };
         } else {
           els.historyBanner.hidden = true;
@@ -382,6 +392,11 @@
     els.cta.addEventListener("click", openSheet);
     els.overlay.addEventListener("click", closeSheet);
     els.close.addEventListener("click", closeSheet);
+    els.resultBack.addEventListener("click", () => {
+      state.resultScreenOpen = false;
+      renderTryOnPanel();
+      renderLocks();
+    });
 
     let setupLoaded = false;
     async function openSheet() {
@@ -390,7 +405,11 @@
       els.sheet.classList.add("open");
       els.sheet.setAttribute("aria-hidden", "false");
       lockBodyScroll();
-      switchTab(state.activeTab);
+      if (state.resultScreenOpen && state.tryOnStep === "result") {
+        renderTryOnPanel();
+      } else {
+        switchTab(state.activeTab);
+      }
 
       if (!setupLoaded) {
         setupLoaded = true;
@@ -441,53 +460,52 @@
         const tab = btn.dataset.tab;
         btn.classList.toggle("active", tab === state.activeTab);
         const featureKey = TAB_FEATURE[tab];
-        const locked = featureKey ? !hasFeature(featureKey) : false;
+        const locked =
+          state.featuresLoaded && !state.featuresError && featureKey
+            ? !hasFeature(featureKey)
+            : false;
         btn.classList.toggle("locked", locked);
       });
     }
 
     function renderLocks() {
       Object.keys(TAB_FEATURE).forEach((tab) => {
-        const locked = !hasFeature(TAB_FEATURE[tab]);
+        const locked =
+          state.featuresLoaded &&
+          !state.featuresError &&
+          !hasFeature(TAB_FEATURE[tab]);
         const lockEl = root.querySelector(`[data-panel-lock="${tab}"]`);
         const bodyEl = root.querySelector(`[data-panel-body="${tab}"]`);
+
         if (lockEl) {
-          lockEl.hidden = !locked;
-          if (locked) {
-            const textEl = lockEl.querySelector("p");
-            if (state.featuresError) {
-              // Not a real plan restriction — the features check itself
-              // failed (network/auth/misconfigured proxy). Say so plainly
-              // instead of implying this plan has no features, and offer a
-              // one-tap retry rather than making the shopper reopen the sheet.
-              textEl.textContent = "Couldn't check your plan.";
-              lockEl.classList.add("tryon-panel-lock--error");
-              if (!lockEl.querySelector("[data-tryon-retry-features]")) {
-                const retryBtn = document.createElement("button");
-                retryBtn.type = "button";
-                retryBtn.dataset.tryonRetryFeatures = "";
-                retryBtn.className = "tryon-secondary";
-                retryBtn.textContent = "Retry";
-                retryBtn.addEventListener("click", loadFeatures);
-                lockEl.appendChild(retryBtn);
-              }
-            } else {
-              lockEl.classList.remove("tryon-panel-lock--error");
-              const retryBtn = lockEl.querySelector(
-                "[data-tryon-retry-features]",
-              );
-              if (retryBtn) retryBtn.remove();
+          lockEl.hidden = !locked || state.featuresError;
+          lockEl.classList.toggle(
+            "tryon-panel-lock--error",
+            false,
+          );
+
+          const textEl = lockEl.querySelector("p");
+          const retry = lockEl.querySelector("[data-tryon-retry-features]");
+
+          if (locked && !state.featuresError) {
+            if (textEl) {
+              textEl.dataset.defaultText ||= textEl.textContent;
               textEl.textContent =
-                textEl.dataset.defaultText || textEl.textContent;
+                "This feature is included with a higher LetsWearIt plan.";
             }
+            if (retry) retry.hidden = true;
           }
         }
-        if (bodyEl) bodyEl.hidden = locked;
+
+        if (bodyEl) bodyEl.hidden = locked && !state.featuresError;
       });
-      els.photoPicker.hidden = !PHOTO_TABS.has(state.activeTab);
+
+      els.photoPicker.hidden =
+        !PHOTO_TABS.has(state.activeTab) || state.resultScreenOpen;
     }
 
     function switchTab(tab) {
+      state.resultScreenOpen = false;
       state.activeTab = tab;
       root.querySelectorAll("[data-panel]").forEach((panel) => {
         panel.hidden = panel.dataset.panel !== tab;
@@ -644,6 +662,16 @@
     }
 
     async function generateTryOn() {
+      if (
+        state.featuresLoaded &&
+        !state.featuresError &&
+        !hasFeature("tryon")
+      ) {
+        showError(
+          "AI try-on is not included in this store's current plan.",
+        );
+        return;
+      }
       if (!requirePhoto()) return;
 
       const angles = defaultAngleSet();
@@ -661,11 +689,15 @@
         const firstUrl = await generateAngle(angles[0]);
         state.resultImages[angles[0]] = firstUrl;
         state.angleStatus[angles[0]] = "ready";
-        angles.slice(1).forEach((a) => (state.angleStatus[a] = "loading"));
+        angles.slice(1).forEach((a) => (state.angleStatus[a] = "queued"));
         state.tryOnStep = "result";
+        state.resultScreenOpen = true;
         renderTryOnPanel();
         angles.slice(1).forEach((a, i) => {
-          window.setTimeout(() => generateBackgroundAngle(a), (i + 1) * 900);
+          window.setTimeout(
+            () => generateBackgroundAngle(a),
+            (i + 1) * 1200,
+          );
         });
       } catch (err) {
         state.tryOnStep = "idle";
@@ -689,18 +721,25 @@
       }
       renderAngleTabs();
       if (state.activeAngle === angle) renderResultImage();
+      if (state.resultScreenOpen) renderResultImage();
       if (state.activeTab === "spin") renderSpinPanel();
     }
 
     function renderTryOnPanel() {
-      els.tryOnIdle.hidden = state.tryOnStep !== "idle";
-      els.tryOnProcessing.hidden = state.tryOnStep !== "processing";
-      els.tryOnResult.hidden = state.tryOnStep !== "result";
-      if (state.tryOnStep === "result") {
+      const showResult = state.tryOnStep === "result" && state.resultScreenOpen;
+      els.tryOnIdle.hidden = state.tryOnStep !== "idle" || showResult;
+      els.tryOnProcessing.hidden =
+        state.tryOnStep !== "processing" || showResult;
+      els.mainContent.hidden = showResult;
+      els.resultScreen.hidden = !showResult;
+
+      if (showResult) {
         renderAngleTabs();
         renderResultImage();
         renderAddToCartState();
       }
+
+      renderLocks();
     }
 
     function renderAngleTabs() {
@@ -734,18 +773,22 @@
         els.resultImg.hidden = false;
         els.angleLoading.hidden = true;
         els.resultDownloadBtn.hidden = false;
+        els.angleLoading.hidden = true;
       } else {
         els.resultImg.hidden = true;
         els.angleLoading.hidden = false;
         els.resultDownloadBtn.hidden = true;
-        els.angleLoadingLabel.textContent = `${ANGLE_LABELS[state.activeAngle] || state.activeAngle} view is generating`;
+        els.angleLoadingLabel.textContent = `${ANGLE_LABELS[state.activeAngle] || state.activeAngle} view is being created`;
       }
+      els.resultAngleName.textContent =
+        ANGLE_LABELS[state.activeAngle] || state.activeAngle;
     }
 
     function setActiveAngle(angle) {
       state.activeAngle = angle;
       renderAngleTabs();
       renderResultImage();
+      if (state.resultScreenOpen) renderTryOnPanel();
       if (state.activeTab === "spin") renderSpinPanel();
     }
 

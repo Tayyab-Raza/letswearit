@@ -139,6 +139,22 @@ export async function action({ request }) {
   if (!store) return json({ error: "UNKNOWN_SHOP" }, { status: 403 });
 
   try {
+    await requireFeature(store, "tryon");
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return json(
+        {
+          error: "UPGRADE_REQUIRED",
+          feature: err.feature,
+          message: "AI try-on is not included in the current plan.",
+        },
+        { status: 403 },
+      );
+    }
+    throw err;
+  }
+
+  try {
     await checkAndReserveGeneration(shop);
   } catch (err) {
     if (err instanceof UsageLimitError) {

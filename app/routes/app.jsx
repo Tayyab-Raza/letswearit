@@ -25,7 +25,26 @@ export default function App() {
         <a href="/app/settings">Settings</a>
       </ui-nav-menu>
 
-      <div className="min-h-screen bg-neutral-50">
+      <div className="lwi-admin lwi-admin-shell">
+        <header className="lwi-admin-brandbar">
+          <div className="lwi-admin-brand">
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#070A12]">
+              <img
+                src="/lwi-logo.png"
+                alt="LetsWearIt"
+                className="h-auto w-auto object-contain flex items-center justify-center"
+              />
+            </div>
+            <div>
+              <strong>LetsWearIt</strong>
+              <span>AI virtual try-on</span>
+            </div>
+          </div>
+          <div className="lwi-admin-brand-status">
+            <i aria-hidden="true" />
+            Store connected
+          </div>
+        </header>
         <Outlet />
       </div>
     </AppProvider>

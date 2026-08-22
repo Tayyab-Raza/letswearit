@@ -1,4 +1,5 @@
 import { useLoaderData, useFetcher } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -33,58 +34,65 @@ export default function Settings() {
   const notifyEmail = store.ownerEmail || store.manualNotifyEmail;
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
+    <main className="lwi-page lwi-page--narrow">
+      <section className="lwi-hero">
+        <div>
+          <p className="lwi-kicker">Workspace</p>
+          <h1 className="lwi-title">Settings.</h1>
+          <p className="lwi-subtitle">
+            Keep your usage alerts and store preferences in one place.
+          </p>
+        </div>
+      </section>
 
-      <div className="mt-8 rounded-2xl border border-neutral-200 p-6">
-        <h2 className="text-base font-semibold text-neutral-900">
-          Usage notifications
-        </h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          We'll email this address when your store is close to, or reaches, its
-          monthly try-on generation limit.
-        </p>
+      <section className="lwi-card">
+        <div className="flex items-start gap-3">
+          <div className="lwi-step-number">✦</div>
+          <div>
+            <h2 className="lwi-card-title">Usage notifications</h2>
+            <p className="lwi-card-copy">
+              We'll email this address when your store is close to, or reaches,
+              its monthly AI generation limit.
+            </p>
+          </div>
+        </div>
 
         {store.ownerEmail ? (
-          <p className="mt-4 text-sm text-neutral-700">
-            Currently sending to:{" "}
-            <span className="font-medium">{store.ownerEmail}</span>{" "}
-            <span className="text-neutral-400">
-              (from your store's contact info)
-            </span>
-          </p>
+          <div className="mt-5 rounded-xl border border-[#e4e7ee] bg-[#fafbfe] px-4 py-3 text-xs text-neutral-600">
+            Currently sending to <strong>{store.ownerEmail}</strong>
+            <span className="ml-1 text-neutral-400">(store contact)</span>
+          </div>
         ) : (
-          <fetcher.Form method="POST" className="mt-4 flex gap-3">
+          <fetcher.Form method="POST" className="mt-5 flex gap-2">
             <input
               type="email"
               name="manualNotifyEmail"
               defaultValue={store.manualNotifyEmail || ""}
               placeholder="owner@yourstore.com"
-              className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+              className="min-w-0 flex-1 px-3 py-2.5 text-xs"
             />
-            <button
-              type="submit"
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800"
-            >
-              Save
+            <button type="submit" className="lwi-btn-primary">
+              {fetcher.state !== "idle" ? "Saving…" : "Save"}
             </button>
           </fetcher.Form>
         )}
 
         {fetcher.data?.error && (
-          <p className="mt-3 text-sm text-red-600">{fetcher.data.error}</p>
+          <p className="mt-3 text-xs text-red-600">{fetcher.data.error}</p>
         )}
         {fetcher.data?.success && (
-          <p className="mt-3 text-sm text-green-600">Saved.</p>
+          <p className="mt-3 text-xs text-green-700">Notification email saved.</p>
         )}
-
         {!notifyEmail && (
-          <p className="mt-3 text-sm text-amber-600">
-            No notification email set yet — you won't be alerted before hitting
-            your limit.
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            No notification email is set yet.
           </p>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

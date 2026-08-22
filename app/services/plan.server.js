@@ -23,7 +23,24 @@ export class FeatureNotAvailableError extends Error {
 
 // Returns the feature list to check against for a given store.
 export async function getStoreFeatures(store) {
-  if (store.subscriptionStatus === "trial") return TRIAL_FEATURES;
+  if (!store) return [];
+
+  // Treat an unexpired trial as a trial even if a webhook or an older record
+  // has temporarily stored a different subscriptionStatus. The storefront
+  // and generation APIs must use the same source of truth.
+  const trialIsActive =
+    store.trialEndsAt &&
+    new Date(store.trialEndsAt).getTime() > Date.now() &&
+    (store.planKey === "trial" || store.subscriptionStatus === "trial");
+
+  if (
+    trialIsActive ||
+    (store.subscriptionStatus === "trial" &&
+      (!store.trialEndsAt ||
+        new Date(store.trialEndsAt).getTime() > Date.now()))
+  ) {
+    return TRIAL_FEATURES;
+  }
 
   const plan = await prisma.plan.findUnique({ where: { key: store.planKey } });
   return plan?.features || [];

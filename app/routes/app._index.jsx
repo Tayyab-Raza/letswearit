@@ -70,25 +70,24 @@ export const loader = async ({ request }) => {
   return { store, storeFeatures, planForFeature };
 };
 
+
 function StatCard({ label, value, sub }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="text-sm text-neutral-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-neutral-900">{value}</p>
-      {sub && <p className="mt-1 text-xs text-neutral-400">{sub}</p>}
+    <div className="lwi-stat">
+      <div className="lwi-stat-label">{label}</div>
+      <div className="lwi-stat-value">{value}</div>
+      {sub && <div className="lwi-stat-sub">{sub}</div>}
     </div>
   );
 }
 
 function StepCard({ number, title, children }) {
   return (
-    <div className="flex gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
-      <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-neutral-900 text-sm font-semibold text-white">
-        {number}
-      </div>
+    <div className="lwi-step">
+      <div className="lwi-step-number">{number}</div>
       <div>
-        <p className="font-semibold text-neutral-900">{title}</p>
-        <p className="mt-1 text-sm text-neutral-500">{children}</p>
+        <strong>{title}</strong>
+        <p>{children}</p>
       </div>
     </div>
   );
@@ -96,20 +95,14 @@ function StepCard({ number, title, children }) {
 
 function FeatureCard({ feature, active, plan }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+    <div className="lwi-card lwi-feature">
       <div className="flex items-start justify-between gap-3">
-        <p className="font-semibold text-neutral-900">{feature.label}</p>
-        {active ? (
-          <span className="flex-none rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
-            Active on your plan
-          </span>
-        ) : (
-          <span className="flex-none rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600">
-            {plan ? `Included in ${plan.name}` : "Higher plan"}
-          </span>
-        )}
+        <p className="m-0 text-sm font-semibold text-neutral-900">{feature.label}</p>
+        <span className={`lwi-badge ${active ? "lwi-badge--active" : "lwi-badge--plan"}`}>
+          {active ? "Active" : plan ? `Included in ${plan.name}` : "Higher plan"}
+        </span>
       </div>
-      <p className="mt-1.5 text-sm text-neutral-500">{feature.description}</p>
+      <p className="mt-2 text-xs leading-5 text-neutral-500">{feature.description}</p>
     </div>
   );
 }
@@ -125,119 +118,93 @@ export default function Index() {
     : null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="flex items-center justify-between">
+    <main className="lwi-page">
+      <section className="lwi-hero">
         <div>
-          <p className="text-sm font-medium text-neutral-400">LetsWearIt</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-900">
-            AI Try-On
-          </h1>
+          <p className="lwi-kicker">LetsWearIt AI</p>
+          <h1 className="lwi-title">Turn browsing into trying.</h1>
+          <p className="lwi-subtitle">
+            Give shoppers a premium virtual try-on experience directly on your
+            product pages. Upload product references once and LetsWearIt handles
+            the AI preview for you.
+          </p>
         </div>
         {store?.subscriptionStatus === "trial" && daysLeftInTrial !== null && (
-          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700">
-            {daysLeftInTrial} day{daysLeftInTrial === 1 ? "" : "s"} left in
-            trial
+          <span className="lwi-trial-pill">
+            <i>✦</i> Free trial · {daysLeftInTrial} day{daysLeftInTrial === 1 ? "" : "s"} left
           </span>
         )}
-      </div>
-
-      <p className="mt-3 max-w-2xl text-sm text-neutral-500">
-        Let customers see how a product looks on them before they buy. Upload
-        reference photos for a product and a floating{" "}
-        <span className="font-medium text-neutral-700">Try It On</span> button
-        appears on that product's storefront page automatically.
-      </p>
+      </section>
 
       {store && (
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="lwi-grid-3">
           <StatCard
-            label="Plan"
+            label="Current plan"
             value={store.planKey === "trial" ? "Free trial" : store.planKey}
           />
           <StatCard
-            label="Generations used"
+            label="Generations"
             value={`${store.generationsUsed} / ${store.generationLimit}`}
-            sub="resets each billing period"
+            sub="Current billing period"
           />
-          <StatCard label="Status" value={store.subscriptionStatus} />
+          <StatCard label="Store status" value={store.subscriptionStatus} />
         </div>
       )}
 
-      <h2 className="mt-10 text-lg font-semibold text-neutral-900">
-        How it works
-      </h2>
-      <div className="mt-4 grid grid-cols-1 gap-4">
-        <StepCard number={1} title="Add reference photos">
-          Go to{" "}
-          <a href="/app/products" className="underline">
-            Products
-          </a>
-          , open any product, and upload a front, back, and side photo. This
-          writes each image to that product as a metafield — no theme editing
-          required.
-        </StepCard>
-        <StepCard number={2} title="Set a category and size chart">
-          Each product is auto-classified (outfit, footwear, handbag, or
-          jewelry) the first time it's tried on — check or override it on the
-          product page. Add a size chart there too, so size suggestions use the
-          product's real sizing instead of a generic estimate.
-        </StepCard>
-        <StepCard number={3} title="Widget appears automatically">
-          Any product with a front photo saved shows the "Try It On" button on
-          its storefront page. Turn it on once under{" "}
-          <span className="font-medium">Theme Editor → App embeds</span>.
-        </StepCard>
-        <StepCard number={4} title="Customer tries it on">
-          They upload their own photo (or use a sample), tap Generate, and see
-          themselves wearing the product. Depending on your plan, they can also
-          get a size suggestion, spin through extra angles, add companion
-          products for a full outfit, generate a short video, or revisit past
-          try-ons from their closet.
-        </StepCard>
-        <StepCard number={5} title="Track usage and stay covered">
-          Every generation counts against your plan's monthly limit. Check{" "}
-          <a href="/app/billing" className="underline">
-            Billing
-          </a>{" "}
-          anytime to see usage or change plans, and we'll email you
-          automatically at 80% and 100% of your limit.
-        </StepCard>
-      </div>
+      <section className="mt-10">
+        <div className="mb-4">
+          <p className="lwi-kicker">Setup</p>
+          <h2 className="m-0 text-lg font-bold tracking-tight text-neutral-900">Get your first product live</h2>
+        </div>
+        <div className="grid gap-3">
+          <StepCard number="01" title="Add reference photos">
+            Open <a href="/app/products">Products</a> and upload front, back and
+            side reference photos. These become the visual anchors for your AI
+            generations.
+          </StepCard>
+          <StepCard number="02" title="Set the product profile">
+            Confirm the category and add a size chart when relevant. LetsWearIt
+            uses these details to tailor prompts and fit guidance.
+          </StepCard>
+          <StepCard number="03" title="Enable the storefront widget">
+            Turn on the LetsWearIt app embed in Theme Editor. The floating
+            <strong className="ml-1">Try It On</strong> button will appear on
+            eligible product pages.
+          </StepCard>
+          <StepCard number="04" title="Let shoppers create their look">
+            Customers upload a photo, generate their look, explore angles and
+            use the features included with their plan.
+          </StepCard>
+        </div>
+      </section>
 
-      <h2 className="mt-10 text-lg font-semibold text-neutral-900">
-        Features & what's included
-      </h2>
-      <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-        {store?.subscriptionStatus === "trial"
-          ? "Your trial includes every feature below. Here's which plan keeps each one active once it ends."
-          : "What's live on your current plan, and what a higher plan unlocks."}
-      </p>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {FEATURES.map((feature) => (
-          <FeatureCard
-            key={feature.key}
-            feature={feature}
-            active={storeFeatures.includes(feature.key)}
-            plan={planForFeature[feature.key]}
-          />
-        ))}
-      </div>
+      <section className="mt-10">
+        <div className="mb-4">
+          <p className="lwi-kicker">Capabilities</p>
+          <h2 className="m-0 text-lg font-bold tracking-tight text-neutral-900">Everything your storefront can offer</h2>
+          <p className="mt-1 text-xs text-neutral-500">
+            {store?.subscriptionStatus === "trial"
+              ? "Your active trial includes every feature so you can experience the complete customer journey."
+              : "See what is active now and what a higher plan unlocks."}
+          </p>
+        </div>
+        <div className="lwi-grid-2">
+          {FEATURES.map((feature) => (
+            <FeatureCard
+              key={feature.key}
+              feature={feature}
+              active={storeFeatures.includes(feature.key)}
+              plan={planForFeature[feature.key]}
+            />
+          ))}
+        </div>
+      </section>
 
-      <div className="mt-10 flex gap-3">
-        <a
-          href="/app/products"
-          className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800"
-        >
-          Add your first product
-        </a>
-        <a
-          href="/app/billing"
-          className="rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-100"
-        >
-          View plans
-        </a>
+      <div className="mt-8 flex flex-wrap gap-2">
+        <a href="/app/products" className="lwi-btn-primary">Configure products →</a>
+        <a href="/app/billing" className="lwi-btn-secondary">View plans</a>
       </div>
-    </div>
+    </main>
   );
 }
 

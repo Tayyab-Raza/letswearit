@@ -169,19 +169,24 @@ export default function ProductsDashboard() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-900">Products</h1>
-      <p className="mt-1 text-sm text-neutral-500">
+    <main className="lwi-page">
+      <section className="lwi-hero">
+        <div>
+          <p className="lwi-kicker">Catalog</p>
+          <h1 className="lwi-title">Products.</h1>
+          <p className="lwi-subtitle">
         Open a product to add its try-on reference photos, size chart, or
         category.
-      </p>
+          </p>
+        </div>
+      </section>
 
       <input
         type="text"
         value={searchDraft}
         onChange={(e) => setSearchDraft(e.target.value)}
         placeholder="Search by product title"
-        className="mt-6 w-full max-w-sm rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none"
+        className="mt-2 w-full max-w-sm rounded-xl border border-neutral-300 px-3 py-2.5 text-xs focus:border-neutral-900 focus:outline-none"
       />
 
       <div
@@ -275,6 +280,6 @@ export default function ProductsDashboard() {
           Next
         </button>
       </div>
-    </div>
+    </main>
   );
 }
